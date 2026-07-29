@@ -1,0 +1,112 @@
+// re:Fresh data model — see ../../reFresh-docs/project-plan.md for background.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProteinType {
+  MEAT
+  FISH
+  VEGETARIAN
+  VEGAN
+  UNKNOWN
+}
+
+enum IngredientCategory {
+  PRODUCE
+  PROTEIN
+  DAIRY
+  PANTRY
+  HERB_SPICE
+  SAUCE_CONDIMENT
+  GRAIN_STARCH
+  OTHER
+}
+
+model Recipe {
+  id             String      @id @default(cuid())
+  hfId           String      @unique // id extracted from the HelloFresh URL slug
+  slug           String      @unique
+  name           String
+  subtitle       String? // the "with ..." part of a HelloFresh recipe title
+  description    String?
+  imageUrl       String?
+  sourceUrl      String
+  cookMinutes    Int?
+  servings       Int?
+  calories       Int?
+  proteinType    ProteinType @default(UNKNOWN)
+  proteinTypeManualOverride Boolean @default(false)
+  cuisine        String?
+  category       String?
+  ratingValue    Float?
+  ratingCount    Int?
+  lastScrapedAt  DateTime    @default(now())
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  ingredients      RecipeIngredient[]
+  mealPlanRecipes  MealPlanRecipe[]
+
+  @@index([proteinType])
+  @@index([cuisine])
+  @@index([calories])
+  @@index([cookMinutes])
+}
+
+model Ingredient {
+  id            String             @id @default(cuid())
+  canonicalName String             @unique
+  category      IngredientCategory @default(OTHER)
+
+  aliases          IngredientAlias[]
+  recipeIngredients RecipeIngredient[]
+}
+
+model IngredientAlias {
+  id           String     @id @default(cuid())
+  rawText      String     @unique
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@index([ingredientId])
+}
+
+model RecipeIngredient {
+  id           String     @id @default(cuid())
+  recipeId     String
+  ingredientId String
+  quantity     Float?
+  unit         String?
+  rawText      String
+
+  recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@index([ingredientId])
+}
+
+model MealPlan {
+  id        String   @id @default(cuid())
+  label     String
+  createdAt DateTime @default(now())
+
+  recipes MealPlanRecipe[]
+}
+
+model MealPlanRecipe {
+  id         String   @id @default(cuid())
+  mealPlanId String
+  recipeId   String
+
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  recipe   Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([mealPlanId, recipeId])
+}
