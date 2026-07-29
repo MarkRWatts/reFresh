@@ -67,6 +67,18 @@ model Recipe {
   // filter on array length directly. Excluded from the default browse view,
   // but not deleted: still reachable by slug, and recomputed on re-scrape.
   isBrowsable    Boolean     @default(true)
+  // HelloFresh frequently remixes the same "hero" component (e.g. a fried
+  // chicken burger) with different sides across separate weekly menus,
+  // producing near-duplicate recipes under different ids/names. Computed
+  // offline by scripts/detect-variants.ts (IDF-weighted ingredient-overlap
+  // clustering — see src/lib/recipes/variantDetection.ts), not at scrape
+  // time, since it's a whole-catalog comparison. Null if this recipe isn't
+  // part of a detected variant cluster, or is the cluster's chosen
+  // representative; otherwise points to that representative, which is what
+  // the default browse view shows in its place.
+  variantOfId    String?
+  variantOf      Recipe?     @relation("RecipeVariants", fields: [variantOfId], references: [id])
+  variants       Recipe[]    @relation("RecipeVariants")
   lastScrapedAt  DateTime    @default(now())
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -79,6 +91,7 @@ model Recipe {
   @@index([calories])
   @@index([cookMinutes])
   @@index([isBrowsable])
+  @@index([variantOfId])
 }
 
 model Ingredient {

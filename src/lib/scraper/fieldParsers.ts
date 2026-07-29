@@ -54,8 +54,11 @@ export function splitNameAndSubtitle(fullName: string): {
   name: string;
   subtitle: string | null;
 } {
-  const match = /^(.*?)\swith\s(.+)$/i.exec(fullName.trim());
-  if (!match) return { name: fullName.trim(), subtitle: null };
+  // Some titles have doubled-up whitespace from HelloFresh's own template
+  // concatenation (e.g. "...Burger   and Blue Cheese Mac and Cheese").
+  const normalized = fullName.trim().replace(/\s+/g, " ");
+  const match = /^(.*?)\swith\s(.+)$/i.exec(normalized);
+  if (!match) return { name: normalized, subtitle: null };
   return { name: match[1].trim(), subtitle: `with ${match[2].trim()}` };
 }
 

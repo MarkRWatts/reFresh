@@ -140,6 +140,27 @@ export default async function RecipeDetailPage({
               ))}
             </ul>
           </div>
+
+          {recipe.variants.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
+              <h2 className="text-sm font-semibold text-zinc-900">Similar variants</h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                HelloFresh reuses this dish with a different side across other weeks.
+              </p>
+              <ul className="mt-2 space-y-1.5 text-sm">
+                {recipe.variants.map((variant) => (
+                  <li key={variant.id}>
+                    <Link
+                      href={`/recipes/${variant.slug}`}
+                      className="text-emerald-700 hover:text-emerald-800 hover:underline"
+                    >
+                      {variant.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </main>

@@ -36,3 +36,16 @@ createdb refresh_dev   # already created for local dev
 npm run scrape -- --limit 50   # sample run before a full crawl
 npm run scrape                 # full crawl of the recipe sitemap
 ```
+
+## Near-duplicate detection
+
+HelloFresh frequently remixes the same "hero" dish (e.g. a fried chicken burger) with
+a different side across separate weekly menus. After (re-)scraping, run:
+
+```bash
+npm run detect-variants
+```
+
+This re-analyzes the whole catalog and marks near-duplicates via `Recipe.variantOfId`,
+so only one representative per cluster shows in the default browse view (the others
+stay reachable by URL and are linked from the chosen one's detail page).

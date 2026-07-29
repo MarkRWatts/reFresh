@@ -36,10 +36,14 @@ export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMM
 
 function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
   // Excludes scraped entries that aren't really a cookable recipe (see
-  // isBrowsable's definition on the Recipe model for the exact rule).
-  // Still reachable directly by URL; recomputed on re-scrape.
+  // isBrowsable's definition on the Recipe model for the exact rule), and
+  // non-primary members of a detected near-duplicate cluster (see
+  // variantOfId's definition) — the primary is shown in their place, with
+  // a link to the variants from its detail page. Both still reachable
+  // directly by URL; recomputed on re-scrape / re-running detect-variants.
   const where: Prisma.RecipeWhereInput = {
     isBrowsable: true,
+    variantOfId: null,
   };
 
   if (params.proteinTypes && params.proteinTypes.length > 0) {
@@ -122,14 +126,27 @@ export async function listCuisines(): Promise<string[]> {
   return rows.map((r) => r.cuisine).filter((c): c is string => c !== null);
 }
 
+const VARIANT_SUMMARY_SELECT = {
+  id: true,
+  slug: true,
+  name: true,
+  subtitle: true,
+} satisfies Prisma.RecipeSelect;
+
 export type RecipeDetail = Prisma.RecipeGetPayload<{
-  include: { ingredients: { include: { ingredient: true } } };
+  include: {
+    ingredients: { include: { ingredient: true } };
+    variants: { select: typeof VARIANT_SUMMARY_SELECT };
+  };
 }>;
 
-/** Full recipe detail — ingredients (with canonical names) + instructions — for the detail view. */
+/** Full recipe detail — ingredients (with canonical names), instructions, and any detected near-duplicate variants — for the detail view. */
 export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null> {
   return prisma.recipe.findUnique({
     where: { slug },
-    include: { ingredients: { include: { ingredient: true } } },
+    include: {
+      ingredients: { include: { ingredient: true } },
+      variants: { select: VARIANT_SUMMARY_SELECT },
+    },
   });
 }
