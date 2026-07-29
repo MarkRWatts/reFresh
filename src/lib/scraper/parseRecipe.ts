@@ -1,4 +1,4 @@
-import { extractRecipeAppData } from "./appData";
+import { extractRecipeAppData, extractRecipeSteps, type RecipeStep } from "./appData";
 import { extractRecipeJsonLd } from "./jsonld";
 import {
   parseCalories,
@@ -12,6 +12,8 @@ import {
 } from "./fieldParsers";
 import { parseIngredientLine, type ParsedIngredientLine } from "./ingredientParser";
 import { classifyProteinType, type ProteinType } from "./proteinType";
+
+export type { RecipeStep };
 
 export interface ParsedRecipe {
   hfId: string;
@@ -27,7 +29,7 @@ export interface ParsedRecipe {
   proteinType: ProteinType;
   cuisine: string | null;
   category: string | null;
-  instructions: string[];
+  steps: RecipeStep[];
   ratingValue: number | null;
   ratingCount: number | null;
   ingredients: ParsedIngredientLine[];
@@ -66,6 +68,16 @@ export function parseRecipePage(finalUrl: string, html: string): ParsedRecipe {
   const image = Array.isArray(jsonLd.image) ? jsonLd.image[0] : jsonLd.image;
   const ratingCount = toNumberOrNull(jsonLd.aggregateRating?.ratingCount);
   const appData = extractRecipeAppData(html);
+  // The internal app data has richer per-step content (images, captions)
+  // than the JSON-LD's text-only recipeInstructions; fall back to the
+  // latter only if that internal record isn't present at all.
+  const steps =
+    extractRecipeSteps(html) ??
+    parseInstructions(jsonLd.recipeInstructions).map((text) => ({
+      text,
+      imageUrl: null,
+      caption: null,
+    }));
 
   return {
     hfId,
@@ -81,7 +93,7 @@ export function parseRecipePage(finalUrl: string, html: string): ParsedRecipe {
     proteinType,
     cuisine: toStringOrNull(jsonLd.recipeCuisine),
     category: toStringOrNull(jsonLd.recipeCategory),
-    instructions: parseInstructions(jsonLd.recipeInstructions),
+    steps,
     ratingValue: toNumberOrNull(jsonLd.aggregateRating?.ratingValue),
     ratingCount: ratingCount != null ? Math.round(ratingCount) : null,
     ingredients,

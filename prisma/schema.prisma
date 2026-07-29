@@ -44,7 +44,10 @@ model Recipe {
   proteinTypeManualOverride Boolean @default(false)
   cuisine        String?
   category       String?
-  instructions   String[]    // ordered plain-text steps
+  // Ordered cooking steps as [{text, imageUrl, caption}], stored as JSON
+  // since some recipes have a distinct photo + caption per step (e.g.
+  // "Chip, Chip, Hooray") that a plain text array can't carry.
+  steps          Json        @default("[]")
   ratingValue    Float?
   ratingCount    Int?
   // HelloFresh's own internal publish-status flags for this recipe,

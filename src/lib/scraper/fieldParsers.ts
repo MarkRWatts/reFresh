@@ -70,7 +70,7 @@ const HTML_ENTITIES: Record<string, string> = {
 };
 
 /** Strips HTML tags from a HelloFresh instruction step and decodes the handful of entities it actually uses, keeping only plain text (never rendered as raw HTML). */
-function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string): string {
   let text = html.replace(/<\/p>|<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "");
   for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
     text = text.replaceAll(entity, char);

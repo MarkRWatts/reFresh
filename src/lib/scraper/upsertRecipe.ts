@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { canonicalizeIngredientName } from "./ingredientNormalize";
 import type { ParsedRecipe } from "./parseRecipe";
 
@@ -19,7 +20,7 @@ import type { ParsedRecipe } from "./parseRecipe";
  */
 function computeIsBrowsable(parsed: ParsedRecipe): boolean {
   if (parsed.ingredients.length === 0) return false;
-  if (parsed.instructions.length <= 1) return false;
+  if (parsed.steps.length <= 1) return false;
   return true;
 }
 
@@ -103,7 +104,7 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
       proteinType,
       cuisine: parsed.cuisine,
       category: parsed.category,
-      instructions: parsed.instructions,
+      steps: parsed.steps as unknown as Prisma.InputJsonValue,
       ratingValue: parsed.ratingValue,
       ratingCount: parsed.ratingCount,
       isPublished: parsed.isPublished,
@@ -123,7 +124,7 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
       proteinType,
       cuisine: parsed.cuisine,
       category: parsed.category,
-      instructions: parsed.instructions,
+      steps: parsed.steps as unknown as Prisma.InputJsonValue,
       ratingValue: parsed.ratingValue,
       ratingCount: parsed.ratingCount,
       isPublished: parsed.isPublished,

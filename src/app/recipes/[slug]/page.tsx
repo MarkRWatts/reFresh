@@ -5,6 +5,7 @@ import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
+import { parseRecipeSteps } from "@/lib/recipes/steps";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
   return (
@@ -22,6 +23,7 @@ export default async function RecipeDetailPage({
   const { slug } = await params;
   const recipe = await getRecipeBySlug(slug);
   if (!recipe) notFound();
+  const steps = parseRecipeSteps(recipe.steps);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
@@ -75,16 +77,34 @@ export default async function RecipeDetailPage({
             View original recipe on HelloFresh ↗
           </a>
 
-          {recipe.instructions.length > 0 && (
+          {steps.length > 0 && (
             <div className="mt-8">
               <h2 className="text-lg font-semibold text-zinc-900">Instructions</h2>
-              <ol className="mt-3 space-y-4">
-                {recipe.instructions.map((step, i) => (
+              <ol className="mt-3 space-y-5">
+                {steps.map((step, i) => (
                   <li key={i} className="flex gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-medium text-white">
                       {i + 1}
                     </span>
-                    <p className="whitespace-pre-line text-sm text-zinc-700">{step}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="whitespace-pre-line text-sm text-zinc-700">{step.text}</p>
+                      {step.imageUrl && (
+                        <div className="relative mt-2 aspect-[4/3] w-full max-w-xs overflow-hidden rounded-xl bg-zinc-100">
+                          <Image
+                            src={step.imageUrl}
+                            alt={step.caption ?? `Step ${i + 1}`}
+                            fill
+                            sizes="20rem"
+                            className="object-cover"
+                          />
+                          {step.caption && (
+                            <span className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-xs font-medium text-white">
+                              {step.caption}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ol>
