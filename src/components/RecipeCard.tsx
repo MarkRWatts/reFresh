@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
+import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
+import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import type { RecipeSummary } from "@/lib/recipes/queries";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
@@ -18,7 +20,7 @@ export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
       className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white transition-shadow hover:shadow-md"
     >
       <div className="relative aspect-[4/3] w-full bg-zinc-100">
-        {recipe.imageUrl ? (
+        {hasUsableImage(recipe.imageUrl) ? (
           <Image
             src={recipe.imageUrl}
             alt={recipe.name}
@@ -27,9 +29,7 @@ export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
             className="object-cover transition-transform group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-400">
-            No image
-          </div>
+          <RecipeImagePlaceholder />
         )}
       </div>
 

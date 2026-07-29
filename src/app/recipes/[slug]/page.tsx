@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
+import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
@@ -92,7 +94,7 @@ export default async function RecipeDetailPage({
 
         <div className="order-1 sm:order-2">
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-zinc-100">
-            {recipe.imageUrl && (
+            {hasUsableImage(recipe.imageUrl) ? (
               <Image
                 src={recipe.imageUrl}
                 alt={recipe.name}
@@ -101,6 +103,8 @@ export default async function RecipeDetailPage({
                 className="object-cover"
                 priority
               />
+            ) : (
+              <RecipeImagePlaceholder />
             )}
           </div>
 
