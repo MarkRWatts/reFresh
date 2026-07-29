@@ -35,7 +35,15 @@ const RECIPE_SUMMARY_SELECT = {
 export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMMARY_SELECT }>;
 
 function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
-  const where: Prisma.RecipeWhereInput = {};
+  // A handful of scraped entries (empty/legacy stub pages, ~3% of the
+  // catalog) have zero ingredients. They're useless for this app's whole
+  // point — nothing to share across a meal plan — and with no ingredient
+  // text to inspect, the protein-type classifier can only ever return
+  // UNKNOWN for them too. Excluded from the default browse view; still
+  // reachable directly by URL if a future re-scrape fills them in.
+  const where: Prisma.RecipeWhereInput = {
+    ingredients: { some: {} },
+  };
 
   if (params.proteinTypes && params.proteinTypes.length > 0) {
     where.proteinType = { in: params.proteinTypes };
