@@ -64,6 +64,15 @@ export default async function RecipeDetailPage({
 
           {recipe.description && <p className="mt-4 text-zinc-600">{recipe.description}</p>}
 
+          <a
+            href={recipe.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800 hover:underline"
+          >
+            View original recipe on HelloFresh ↗
+          </a>
+
           {recipe.instructions.length > 0 && (
             <div className="mt-8">
               <h2 className="text-lg font-semibold text-zinc-900">Instructions</h2>
