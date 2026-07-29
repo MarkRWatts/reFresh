@@ -3,6 +3,7 @@ export type ProteinType = "MEAT" | "FISH" | "VEGETARIAN" | "VEGAN" | "UNKNOWN";
 // Terms that mean "this ingredient is a meat/fish substitute", so their
 // presence should NOT trigger a meat/fish match (e.g. "meat-free mince").
 const VEGETARIAN_OVERRIDE_TERMS = [
+  "vegan",
   "meat-free",
   "meat free",
   "plant-based",
@@ -116,9 +117,11 @@ export function classifyProteinType(input: ProteinTypeInput): ProteinType {
 
   let hasMeat = false;
   let hasFish = false;
+  let hasVeganMarker = /\bvegan\b/.test(metaText);
 
   for (const rawName of input.ingredientNames) {
     const n = rawName.toLowerCase();
+    if (/\bvegan\b/.test(n)) hasVeganMarker = true;
     if (VEGETARIAN_OVERRIDE_TERMS.some((term) => n.includes(term))) continue;
     if (FISH_KEYWORDS.some((k) => hasKeyword(n, k))) hasFish = true;
     if (MEAT_KEYWORDS.some((k) => hasKeyword(n, k))) hasMeat = true;
@@ -126,6 +129,6 @@ export function classifyProteinType(input: ProteinTypeInput): ProteinType {
 
   if (hasFish) return "FISH";
   if (hasMeat) return "MEAT";
-  if (/\bvegan\b/.test(metaText)) return "VEGAN";
+  if (hasVeganMarker) return "VEGAN";
   return "VEGETARIAN";
 }

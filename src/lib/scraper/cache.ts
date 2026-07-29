@@ -16,27 +16,38 @@ export interface ManifestEntry {
 type Manifest = Record<string, ManifestEntry>;
 
 let manifestCache: Manifest | null = null;
+// Recipes are scraped with several concurrent workers, and every worker
+// calls loadManifest()/saveManifestEntry(). Without serializing disk access,
+// concurrent first-time loads can race, and a concurrent write can truncate
+// manifest.json while another read is mid-flight — producing a corrupt
+// partial read ("Unexpected end of JSON input"). All disk access to the
+// manifest is chained through this single promise so it's never touched
+// concurrently.
+let manifestQueue: Promise<Manifest> = (async () => {
+  await mkdir(HTML_DIR, { recursive: true });
+  if (!existsSync(MANIFEST_PATH)) return {};
+  const raw = await readFile(MANIFEST_PATH, "utf-8");
+  return JSON.parse(raw) as Manifest;
+})().then((manifest) => {
+  manifestCache = manifest;
+  return manifest;
+});
 
 async function ensureDirs() {
   await mkdir(HTML_DIR, { recursive: true });
 }
 
-export async function loadManifest(): Promise<Manifest> {
-  if (manifestCache) return manifestCache;
-  await ensureDirs();
-  if (!existsSync(MANIFEST_PATH)) {
-    manifestCache = {};
-    return manifestCache;
-  }
-  const raw = await readFile(MANIFEST_PATH, "utf-8");
-  manifestCache = JSON.parse(raw) as Manifest;
-  return manifestCache;
+export function loadManifest(): Promise<Manifest> {
+  return manifestQueue;
 }
 
-export async function saveManifestEntry(url: string, entry: ManifestEntry) {
-  const manifest = await loadManifest();
-  manifest[url] = entry;
-  await writeFile(MANIFEST_PATH, JSON.stringify(manifest, null, 2), "utf-8");
+export function saveManifestEntry(url: string, entry: ManifestEntry): Promise<void> {
+  manifestQueue = manifestQueue.then(async (manifest) => {
+    manifest[url] = entry;
+    await writeFile(MANIFEST_PATH, JSON.stringify(manifest, null, 2), "utf-8");
+    return manifest;
+  });
+  return manifestQueue.then(() => undefined);
 }
 
 /** Slugify a sitemap URL into a filesystem-safe cache key. */
