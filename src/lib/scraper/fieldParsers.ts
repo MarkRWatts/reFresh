@@ -98,12 +98,18 @@ export function parseInstructions(recipeInstructions: unknown): string[] {
  * ".../recipes/korma-baked-salmon-and-chips-69e0c9b84af8f3547a64b22d"
  * -> { hfId: "69e0c9b84af8f3547a64b22d", slug: "korma-baked-salmon-and-chips-69e0c9b84af8f3547a64b22d" }
  *
+ * Some recipe URLs (HelloFresh Market add-on items) nest an extra path
+ * segment, e.g. ".../recipes/market/some-item-<id>" — only the last
+ * segment is kept as the slug, both because it's what uniquely identifies
+ * the item and because the app's `/recipes/[slug]` route is single-segment.
+ *
  * Falls back to using the whole slug as the id if no trailing hex token
  * is found (older recipe URLs use a shorter/differently-shaped id).
  */
 export function parseRecipeUrlIds(url: string): { hfId: string; slug: string } {
   const pathname = new URL(url).pathname;
-  const slug = pathname.replace(/^\/recipes\//, "").replace(/\/+$/, "");
+  const segments = pathname.replace(/^\/recipes\//, "").replace(/\/+$/, "").split("/");
+  const slug = segments[segments.length - 1];
   const idMatch = /-([0-9a-f]{16,})$/i.exec(slug);
   return { hfId: idMatch ? idMatch[1] : slug, slug };
 }

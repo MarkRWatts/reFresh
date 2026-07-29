@@ -1,0 +1,165 @@
+"use client";
+
+import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import type { ProteinType } from "@/generated/prisma/client";
+import {
+  CALORIE_PRESETS,
+  COOK_TIME_PRESETS,
+  PROTEIN_TYPE_OPTIONS,
+  SORT_OPTIONS,
+  type RangePreset,
+} from "@/lib/recipes/filterPresets";
+import { buildFilterQueryString, type ParsedFilters } from "@/lib/recipes/searchParamsUtil";
+
+function pillClasses(active: boolean): string {
+  return [
+    "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+    active
+      ? "border-zinc-900 bg-zinc-900 text-white"
+      : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400",
+  ].join(" ");
+}
+
+function activeRangePreset(presets: RangePreset[], min?: number, max?: number): string {
+  const match = presets.find((p) => p.min === min && p.max === max);
+  return match?.key ?? "any";
+}
+
+export default function FilterBar({
+  filters,
+  cuisines,
+}: {
+  filters: ParsedFilters;
+  cuisines: string[];
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [searchValue, setSearchValue] = useState(filters.search ?? "");
+  const isFirstRender = useRef(true);
+
+  function navigate(next: Partial<ParsedFilters>) {
+    const merged: ParsedFilters = { ...filters, page: 1, ...next };
+    router.push(`${pathname}${buildFilterQueryString(merged)}`, { scroll: false });
+  }
+
+  function toggleProtein(value: ProteinType) {
+    const has = filters.proteinTypes.includes(value);
+    const proteinTypes = has
+      ? filters.proteinTypes.filter((p) => p !== value)
+      : [...filters.proteinTypes, value];
+    navigate({ proteinTypes });
+  }
+
+  function selectCaloriePreset(preset: RangePreset) {
+    navigate({ minCalories: preset.min, maxCalories: preset.max });
+  }
+
+  function selectCookTimePreset(preset: RangePreset) {
+    navigate({ minCookMinutes: preset.min, maxCookMinutes: preset.max });
+  }
+
+  // Debounce the free-text search so every keystroke doesn't trigger a navigation.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const timeout = setTimeout(() => {
+      if (searchValue !== (filters.search ?? "")) {
+        navigate({ search: searchValue || undefined });
+      }
+    }, 350);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchValue]);
+
+  const activeCaloriePreset = activeRangePreset(
+    CALORIE_PRESETS,
+    filters.minCalories,
+    filters.maxCalories,
+  );
+  const activeCookTimePreset = activeRangePreset(
+    COOK_TIME_PRESETS,
+    filters.minCookMinutes,
+    filters.maxCookMinutes,
+  );
+
+  return (
+    <div className="sticky top-[57px] z-10 border-b border-zinc-200 bg-white/95 backdrop-blur">
+      <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            placeholder="Search recipes..."
+            className="w-full rounded-full border border-zinc-300 px-4 py-1.5 text-sm sm:w-56"
+          />
+
+          {PROTEIN_TYPE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => toggleProtein(option.value)}
+              className={pillClasses(filters.proteinTypes.includes(option.value))}
+            >
+              {option.label}
+            </button>
+          ))}
+
+          <select
+            value={filters.cuisine ?? ""}
+            onChange={(e) => navigate({ cuisine: e.target.value || undefined })}
+            className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
+          >
+            <option value="">All cuisines</option>
+            {cuisines.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-1">
+            {CALORIE_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => selectCaloriePreset(preset)}
+                className={pillClasses(activeCaloriePreset === preset.key)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {COOK_TIME_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => selectCookTimePreset(preset)}
+                className={pillClasses(activeCookTimePreset === preset.key)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <select
+            value={filters.sort}
+            onChange={(e) => navigate({ sort: e.target.value as ParsedFilters["sort"] })}
+            className="ml-auto rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                Sort: {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+}

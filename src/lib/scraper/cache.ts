@@ -15,7 +15,6 @@ export interface ManifestEntry {
 
 type Manifest = Record<string, ManifestEntry>;
 
-let manifestCache: Manifest | null = null;
 // Recipes are scraped with several concurrent workers, and every worker
 // calls loadManifest()/saveManifestEntry(). Without serializing disk access,
 // concurrent first-time loads can race, and a concurrent write can truncate
@@ -28,14 +27,7 @@ let manifestQueue: Promise<Manifest> = (async () => {
   if (!existsSync(MANIFEST_PATH)) return {};
   const raw = await readFile(MANIFEST_PATH, "utf-8");
   return JSON.parse(raw) as Manifest;
-})().then((manifest) => {
-  manifestCache = manifest;
-  return manifest;
-});
-
-async function ensureDirs() {
-  await mkdir(HTML_DIR, { recursive: true });
-}
+})();
 
 export function loadManifest(): Promise<Manifest> {
   return manifestQueue;
@@ -67,7 +59,7 @@ export async function readCachedHtml(url: string): Promise<string | null> {
 }
 
 export async function writeCachedHtml(url: string, html: string): Promise<void> {
-  await ensureDirs();
+  await mkdir(HTML_DIR, { recursive: true });
   await writeFile(htmlCachePath(url), html, "utf-8");
 }
 
