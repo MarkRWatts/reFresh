@@ -59,6 +59,40 @@ export function splitNameAndSubtitle(fullName: string): {
   return { name: match[1].trim(), subtitle: `with ${match[2].trim()}` };
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&#39;": "'",
+  "&apos;": "'",
+  "&quot;": '"',
+  "&nbsp;": " ",
+  "&lt;": "<",
+  "&gt;": ">",
+};
+
+/** Strips HTML tags from a HelloFresh instruction step and decodes the handful of entities it actually uses, keeping only plain text (never rendered as raw HTML). */
+function htmlToPlainText(html: string): string {
+  let text = html.replace(/<\/p>|<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "");
+  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
+    text = text.replaceAll(entity, char);
+  }
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Parses a JSON-LD recipeInstructions array (HowToStep objects) into ordered plain-text steps. */
+export function parseInstructions(recipeInstructions: unknown): string[] {
+  if (!Array.isArray(recipeInstructions)) return [];
+  return recipeInstructions
+    .map((step) => {
+      const text = typeof step === "object" && step && "text" in step ? (step as { text?: unknown }).text : null;
+      return typeof text === "string" ? htmlToPlainText(text) : null;
+    })
+    .filter((step): step is string => Boolean(step));
+}
+
 /**
  * Extracts a stable id + slug from a recipe URL, e.g.
  * ".../recipes/korma-baked-salmon-and-chips-69e0c9b84af8f3547a64b22d"

@@ -44,6 +44,7 @@ model Recipe {
   proteinTypeManualOverride Boolean @default(false)
   cuisine        String?
   category       String?
+  instructions   String[]    // ordered plain-text steps
   ratingValue    Float?
   ratingCount    Int?
   lastScrapedAt  DateTime    @default(now())

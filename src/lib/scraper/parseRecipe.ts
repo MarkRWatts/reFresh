@@ -1,6 +1,7 @@
 import { extractRecipeJsonLd } from "./jsonld";
 import {
   parseCalories,
+  parseInstructions,
   parseIsoDurationToMinutes,
   parseRecipeUrlIds,
   parseServings,
@@ -25,6 +26,7 @@ export interface ParsedRecipe {
   proteinType: ProteinType;
   cuisine: string | null;
   category: string | null;
+  instructions: string[];
   ratingValue: number | null;
   ratingCount: number | null;
   ingredients: ParsedIngredientLine[];
@@ -75,6 +77,7 @@ export function parseRecipePage(finalUrl: string, html: string): ParsedRecipe {
     proteinType,
     cuisine: toStringOrNull(jsonLd.recipeCuisine),
     category: toStringOrNull(jsonLd.recipeCategory),
+    instructions: parseInstructions(jsonLd.recipeInstructions),
     ratingValue: toNumberOrNull(jsonLd.aggregateRating?.ratingValue),
     ratingCount: ratingCount != null ? Math.round(ratingCount) : null,
     ingredients,
