@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import PlanToggleButton from "@/components/PlanToggleButton";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
+import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
@@ -24,6 +26,7 @@ export default async function RecipeDetailPage({
   const recipe = await getRecipeBySlug(slug);
   if (!recipe) notFound();
   const steps = parseRecipeSteps(recipe.steps);
+  const planRecipeIds = await getCurrentPlanRecipeIds();
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
@@ -64,6 +67,10 @@ export default async function RecipeDetailPage({
                 {recipe.ratingCount != null && ` (${recipe.ratingCount})`}
               </Badge>
             )}
+          </div>
+
+          <div className="mt-4">
+            <PlanToggleButton recipeId={recipe.id} inPlan={planRecipeIds.has(recipe.id)} />
           </div>
 
           {recipe.description && <p className="mt-4 text-zinc-600">{recipe.description}</p>}

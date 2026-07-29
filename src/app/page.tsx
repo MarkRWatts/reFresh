@@ -1,6 +1,7 @@
 import FilterBar from "@/components/FilterBar";
 import Pagination from "@/components/Pagination";
 import RecipeCard from "@/components/RecipeCard";
+import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { listCuisines, listRecipes } from "@/lib/recipes/queries";
 import { parseFilters, toListParams, type RawSearchParams } from "@/lib/recipes/searchParamsUtil";
 
@@ -13,9 +14,10 @@ export default async function Home({
 }) {
   const filters = parseFilters(await searchParams);
 
-  const [{ recipes, total }, cuisines] = await Promise.all([
+  const [{ recipes, total }, cuisines, planRecipeIds] = await Promise.all([
     listRecipes(toListParams(filters, PAGE_SIZE)),
     listCuisines(),
+    getCurrentPlanRecipeIds(),
   ]);
 
   return (
@@ -34,7 +36,7 @@ export default async function Home({
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {recipes.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} />
+              <RecipeCard key={recipe.id} recipe={recipe} inPlan={planRecipeIds.has(recipe.id)} />
             ))}
           </div>
         )}

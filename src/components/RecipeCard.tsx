@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
+import PlanToggleButton from "@/components/PlanToggleButton";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import type { RecipeSummary } from "@/lib/recipes/queries";
@@ -13,32 +14,40 @@ function Badge({ className, children }: { className: string; children: React.Rea
   );
 }
 
-export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
+export default function RecipeCard({
+  recipe,
+  inPlan,
+}: {
+  recipe: RecipeSummary;
+  inPlan: boolean;
+}) {
   return (
-    <Link
-      href={`/recipes/${recipe.slug}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white transition-shadow hover:shadow-md"
-    >
-      <div className="relative aspect-[4/3] w-full bg-zinc-100">
-        {hasUsableImage(recipe.imageUrl) ? (
-          <Image
-            src={recipe.imageUrl}
-            alt={recipe.name}
-            fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 100vw"
-            className="object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <RecipeImagePlaceholder />
-        )}
-      </div>
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white transition-shadow hover:shadow-md">
+      <Link href={`/recipes/${recipe.slug}`} className="contents">
+        <div className="relative aspect-[4/3] w-full bg-zinc-100">
+          {hasUsableImage(recipe.imageUrl) ? (
+            <Image
+              src={recipe.imageUrl}
+              alt={recipe.name}
+              fill
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 100vw"
+              className="object-cover transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <RecipeImagePlaceholder />
+          )}
+        </div>
+      </Link>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <div>
-          <h3 className="line-clamp-2 text-sm font-semibold text-zinc-900">{recipe.name}</h3>
-          {recipe.subtitle && (
-            <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500">{recipe.subtitle}</p>
-          )}
+        <div className="flex items-start justify-between gap-2">
+          <Link href={`/recipes/${recipe.slug}`} className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 text-sm font-semibold text-zinc-900">{recipe.name}</h3>
+            {recipe.subtitle && (
+              <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500">{recipe.subtitle}</p>
+            )}
+          </Link>
+          <PlanToggleButton recipeId={recipe.id} inPlan={inPlan} compact />
         </div>
 
         <div className="mt-auto flex flex-wrap gap-1.5">
@@ -62,6 +71,6 @@ export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
           )}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }

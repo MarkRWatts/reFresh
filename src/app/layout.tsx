@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import PlanDrawerRoot from "@/components/PlanDrawerRoot";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,6 +38,7 @@ export default function RootLayout({
           </div>
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
+        <PlanDrawerRoot />
       </body>
     </html>
   );
