@@ -1,6 +1,6 @@
-/** Coerces a JSON-LD field to a trimmed string, tolerating the occasional non-string value in older/stub recipe entries. */
+/** Coerces a JSON-LD field to a trimmed string, tolerating the occasional non-string value in older/stub recipe entries. Some old recipes use a literal `0` as a "field not set" sentinel (e.g. recipeCuisine), which is treated as absent rather than the string "0". */
 export function toStringOrNull(value: unknown): string | null {
-  if (value == null) return null;
+  if (value == null || value === 0) return null;
   const str = String(value).trim();
   return str.length > 0 ? str : null;
 }
