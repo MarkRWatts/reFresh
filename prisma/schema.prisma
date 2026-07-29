@@ -47,6 +47,14 @@ model Recipe {
   instructions   String[]    // ordered plain-text steps
   ratingValue    Float?
   ratingCount    Int?
+  // False for scraped entries that aren't really a cookable recipe: zero
+  // ingredients (legacy/empty stub pages), or an explicit "0 minutes" cook
+  // time combined with no real method (GAP-filler placeholders, internal
+  // test recipes, box-bundle components, serving-suggestion platters).
+  // Computed at scrape time — see upsertRecipe.ts — since Prisma can't
+  // filter on array length directly. Excluded from the default browse view,
+  // but not deleted: still reachable by slug, and recomputed on re-scrape.
+  isBrowsable    Boolean     @default(true)
   lastScrapedAt  DateTime    @default(now())
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -58,6 +66,7 @@ model Recipe {
   @@index([cuisine])
   @@index([calories])
   @@index([cookMinutes])
+  @@index([isBrowsable])
 }
 
 model Ingredient {

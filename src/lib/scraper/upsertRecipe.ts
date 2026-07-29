@@ -2,6 +2,22 @@ import { prisma } from "@/lib/db";
 import { canonicalizeIngredientName } from "./ingredientNormalize";
 import type { ParsedRecipe } from "./parseRecipe";
 
+/**
+ * Some scraped pages aren't a real cookable recipe: legacy/empty stub
+ * entries with no ingredients at all, or things like GAP-filler
+ * placeholders, internal test recipes ("Andre Test Prawn Creamy Pasta"),
+ * box-bundle components, and serving-suggestion platters (e.g. a cheese
+ * board) — identifiable by an explicit "0 minutes" cook time combined with
+ * no real method. Genuine recipes that merely lack a published cook time
+ * still have full instructions, so requiring both conditions avoids hiding
+ * them (verified against the scraped sample before adding this check).
+ */
+function computeIsBrowsable(parsed: ParsedRecipe): boolean {
+  if (parsed.ingredients.length === 0) return false;
+  if (parsed.cookMinutes === 0 && parsed.instructions.length <= 1) return false;
+  return true;
+}
+
 // Recipes are processed concurrently (see asyncPool in scripts/scrape.ts), so
 // the same alias name (e.g. "Garlic Clove") — or two different alias
 // spellings that canonicalize to the same ingredient, e.g. "Beef Stock Pot"
@@ -64,6 +80,7 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
 
   const proteinType =
     existing?.proteinTypeManualOverride ? existing.proteinType : parsed.proteinType;
+  const isBrowsable = computeIsBrowsable(parsed);
 
   const recipe = await prisma.recipe.upsert({
     where: { hfId: parsed.hfId },
@@ -84,6 +101,7 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
       instructions: parsed.instructions,
       ratingValue: parsed.ratingValue,
       ratingCount: parsed.ratingCount,
+      isBrowsable,
     },
     update: {
       slug: parsed.slug,
@@ -101,6 +119,7 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
       instructions: parsed.instructions,
       ratingValue: parsed.ratingValue,
       ratingCount: parsed.ratingCount,
+      isBrowsable,
       lastScrapedAt: new Date(),
     },
   });
