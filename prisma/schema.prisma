@@ -47,10 +47,19 @@ model Recipe {
   instructions   String[]    // ordered plain-text steps
   ratingValue    Float?
   ratingCount    Int?
+  // HelloFresh's own internal publish-status flags for this recipe,
+  // extracted from an embedded app-data blob (not the SEO JSON-LD, which
+  // doesn't carry these) — see appData.ts. False for draft/test/removed
+  // recipes ("GAP £3.50" placeholders, "Andre Test Prawn Creamy Pasta")
+  // that are still reachable via direct URL and still show up in the
+  // public sitemap.
+  isPublished    Boolean     @default(true)
+  isActive       Boolean     @default(true)
   // False for scraped entries that aren't really a cookable recipe: zero
-  // ingredients (legacy/empty stub pages), or an explicit "0 minutes" cook
-  // time combined with no real method (GAP-filler placeholders, internal
-  // test recipes, box-bundle components, serving-suggestion platters).
+  // ingredients (legacy/empty stub pages), not published/active per above,
+  // or an explicit "0 minutes" cook time combined with no real method
+  // (serving-suggestion platters like a cheese board — HelloFresh
+  // considers these legitimately published, just not something you cook).
   // Computed at scrape time — see upsertRecipe.ts — since Prisma can't
   // filter on array length directly. Excluded from the default browse view,
   // but not deleted: still reachable by slug, and recomputed on re-scrape.

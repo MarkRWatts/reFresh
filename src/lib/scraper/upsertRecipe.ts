@@ -4,17 +4,22 @@ import type { ParsedRecipe } from "./parseRecipe";
 
 /**
  * Some scraped pages aren't a real cookable recipe: legacy/empty stub
- * entries with no ingredients at all, or things like GAP-filler
- * placeholders, internal test recipes ("Andre Test Prawn Creamy Pasta"),
- * box-bundle components, and serving-suggestion platters (e.g. a cheese
- * board) — identifiable by an explicit "0 minutes" cook time combined with
- * no real method. Genuine recipes that merely lack a published cook time
- * still have full instructions, so requiring both conditions avoids hiding
- * them (verified against the scraped sample before adding this check).
+ * entries with no ingredients, GAP-filler placeholders, internal test
+ * recipes, box-bundle components, and serving-suggestion platters (e.g. a
+ * cheese board) all share the same tell — no real multi-step method.
+ *
+ * HelloFresh's own isPublished/active flags (see appData.ts) were tried
+ * as a filter too, but rejected after checking a content sample: they
+ * mark a recipe unpublished once it rotates out of the current menu, not
+ * just for drafts/junk. Plenty of unpublished recipes are completely
+ * legitimate — full 6-step methods, real photos, real nutrition (e.g.
+ * "Thai Green Style Chicken Curry") — and would have been wrongly hidden.
+ * Still stored on the Recipe model as informational metadata, just not
+ * used here.
  */
 function computeIsBrowsable(parsed: ParsedRecipe): boolean {
   if (parsed.ingredients.length === 0) return false;
-  if (parsed.cookMinutes === 0 && parsed.instructions.length <= 1) return false;
+  if (parsed.instructions.length <= 1) return false;
   return true;
 }
 
@@ -101,6 +106,8 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
       instructions: parsed.instructions,
       ratingValue: parsed.ratingValue,
       ratingCount: parsed.ratingCount,
+      isPublished: parsed.isPublished,
+      isActive: parsed.isActive,
       isBrowsable,
     },
     update: {
@@ -119,6 +126,8 @@ export async function upsertRecipe(parsed: ParsedRecipe): Promise<void> {
       instructions: parsed.instructions,
       ratingValue: parsed.ratingValue,
       ratingCount: parsed.ratingCount,
+      isPublished: parsed.isPublished,
+      isActive: parsed.isActive,
       isBrowsable,
       lastScrapedAt: new Date(),
     },

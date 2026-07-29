@@ -1,3 +1,4 @@
+import { extractRecipeAppData } from "./appData";
 import { extractRecipeJsonLd } from "./jsonld";
 import {
   parseCalories,
@@ -30,6 +31,8 @@ export interface ParsedRecipe {
   ratingValue: number | null;
   ratingCount: number | null;
   ingredients: ParsedIngredientLine[];
+  isPublished: boolean;
+  isActive: boolean;
 }
 
 export class RecipeParseError extends Error {}
@@ -62,6 +65,7 @@ export function parseRecipePage(finalUrl: string, html: string): ParsedRecipe {
 
   const image = Array.isArray(jsonLd.image) ? jsonLd.image[0] : jsonLd.image;
   const ratingCount = toNumberOrNull(jsonLd.aggregateRating?.ratingCount);
+  const appData = extractRecipeAppData(html);
 
   return {
     hfId,
@@ -81,5 +85,7 @@ export function parseRecipePage(finalUrl: string, html: string): ParsedRecipe {
     ratingValue: toNumberOrNull(jsonLd.aggregateRating?.ratingValue),
     ratingCount: ratingCount != null ? Math.round(ratingCount) : null,
     ingredients,
+    isPublished: appData?.isPublished ?? true,
+    isActive: appData?.active ?? true,
   };
 }
