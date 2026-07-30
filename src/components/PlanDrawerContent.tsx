@@ -78,9 +78,19 @@ export default async function PlanDrawerContent() {
       )}
 
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Shopping list
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Shopping list
+          </h3>
+          <Link
+            href="/plan/print"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-emerald-700 hover:underline"
+          >
+            🖨️ Print
+          </Link>
+        </div>
         <ul className="mt-2 space-y-1.5">
           {ingredientGroups.map((group) => (
             <li

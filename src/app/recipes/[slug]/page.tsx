@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import PlanToggleButton from "@/components/PlanToggleButton";
 import FavouriteToggleButton from "@/components/FavouriteToggleButton";
+import PrintButton from "@/components/PrintButton";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
@@ -50,7 +51,7 @@ export default async function RecipeDetailPage({
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
-      <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-700">
+      <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-700 print:hidden">
         ← Back to recipes
       </Link>
 
@@ -89,9 +90,10 @@ export default async function RecipeDetailPage({
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 print:hidden">
             <PlanToggleButton recipeId={recipe.id} inPlan={planRecipeIds.has(recipe.id)} />
             <FavouriteToggleButton recipeId={recipe.id} isFavourite={recipe.isFavourite} />
+            <PrintButton />
           </div>
 
           {recipe.description && <p className="mt-4 text-zinc-600">{recipe.description}</p>}
@@ -100,7 +102,7 @@ export default async function RecipeDetailPage({
             href={recipe.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800 hover:underline"
+            className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800 hover:underline print:hidden"
           >
             View original recipe on HelloFresh ↗
           </a>
@@ -201,7 +203,7 @@ export default async function RecipeDetailPage({
           )}
 
           {recipe.variants.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
+            <div className="mt-4 rounded-2xl border border-zinc-200 p-4 print:hidden">
               <h2 className="text-sm font-semibold text-zinc-900">Similar variants</h2>
               <p className="mt-1 text-xs text-zinc-500">
                 HelloFresh reuses this dish with a different side across other weeks.
