@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import { canonicalizeIngredientName } from "./ingredientNormalize";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
+import { resolveIngredientId } from "@/lib/recipes/ingredientResolution";
 import type { ParsedRecipe } from "./parseRecipe";
 
 /**
@@ -29,57 +29,6 @@ function computeIsBrowsable(parsed: ParsedRecipe): boolean {
   if (parsed.steps.length <= 1) return false;
   if (!hasUsableImage(parsed.imageUrl)) return false;
   return true;
-}
-
-// Recipes are processed concurrently (see asyncPool in scripts/scrape.ts), so
-// the same alias name (e.g. "Garlic Clove") — or two different alias
-// spellings that canonicalize to the same ingredient, e.g. "Beef Stock Pot"
-// vs. "Beef Stock Pots" — can be resolved by two recipes at once. Rather
-// than each concurrent caller independently checking "does this exist?" and
-// racing on the create, every resolution is single-flighted through a
-// promise cache keyed first by alias name and, for new ingredients, also by
-// canonical name — concurrent callers just await the same in-flight promise.
-const ingredientIdByAliasName = new Map<string, Promise<string>>();
-const ingredientCreationByCanonicalName = new Map<string, Promise<string>>();
-
-function getOrCreateIngredientId(canonicalName: string): Promise<string> {
-  const inFlight = ingredientCreationByCanonicalName.get(canonicalName);
-  if (inFlight) return inFlight;
-
-  const creation = prisma.ingredient
-    .upsert({ where: { canonicalName }, create: { canonicalName }, update: {} })
-    .then((ingredient) => ingredient.id);
-  ingredientCreationByCanonicalName.set(canonicalName, creation);
-  return creation;
-}
-
-function resolveIngredientId(name: string): Promise<string> {
-  const inFlight = ingredientIdByAliasName.get(name);
-  if (inFlight) return inFlight;
-
-  const resolution = (async () => {
-    const existingAlias = await prisma.ingredientAlias.findUnique({
-      where: { rawText: name },
-    });
-    if (existingAlias) return existingAlias.ingredientId;
-
-    const canonicalName = canonicalizeIngredientName(name);
-    const ingredientId = await getOrCreateIngredientId(canonicalName);
-
-    // The canonical name itself may differ from this raw alias text
-    // (e.g. canonical "garlic clove" vs. alias "Garlic Cloves"); make sure
-    // both resolve, without erroring if the alias already exists.
-    await prisma.ingredientAlias.upsert({
-      where: { rawText: name },
-      create: { rawText: name, ingredientId },
-      update: {},
-    });
-
-    return ingredientId;
-  })();
-
-  ingredientIdByAliasName.set(name, resolution);
-  return resolution;
 }
 
 /**

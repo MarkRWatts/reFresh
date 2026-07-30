@@ -33,6 +33,7 @@ const RECIPE_SUMMARY_SELECT = {
   ratingValue: true,
   ratingCount: true,
   isFavourite: true,
+  isUserCreated: true,
 } satisfies Prisma.RecipeSelect;
 
 export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMMARY_SELECT }>;

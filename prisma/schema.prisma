@@ -104,6 +104,21 @@ model Recipe {
   // single-implicit-owner pattern as MealPlan). Toggled from the card and
   // detail page; also usable as a filter.
   isFavourite    Boolean     @default(false)
+  // True for a recipe created by cloning + editing an existing one (see
+  // clonedFromId below), rather than scraped from HelloFresh. hfId/slug are
+  // still populated (with a synthetic hfId) so it fits the same unique-key
+  // shape as scraped recipes; sourceUrl is inherited from the clone origin
+  // as an honest provenance record, not a page this recipe actually came
+  // from. `npm run reprocess` never touches these rows — it only ever
+  // upserts by hfId against cached scraped HTML.
+  isUserCreated  Boolean     @default(false)
+  // The recipe this one was cloned from, if any. Deliberately a separate
+  // field from variantOfId: that one is catalog-clustering machinery that
+  // scripts/detect-variants.ts resets and recomputes wholesale on every
+  // run, so reusing it here would silently erase clone provenance.
+  clonedFromId   String?
+  clonedFrom     Recipe?     @relation("RecipeClones", fields: [clonedFromId], references: [id])
+  clones         Recipe[]    @relation("RecipeClones")
   lastScrapedAt  DateTime    @default(now())
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -118,6 +133,7 @@ model Recipe {
   @@index([isBrowsable])
   @@index([variantOfId])
   @@index([isFavourite])
+  @@index([clonedFromId])
 }
 
 model Ingredient {

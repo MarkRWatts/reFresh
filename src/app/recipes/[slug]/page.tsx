@@ -12,6 +12,7 @@ import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPreset
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
 import { parseRecipeSteps } from "@/lib/recipes/steps";
+import { cloneRecipe } from "@/lib/recipes/customRecipeActions";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
   return (
@@ -61,6 +62,9 @@ export default async function RecipeDetailPage({
           {recipe.subtitle && <p className="mt-1 text-zinc-500">{recipe.subtitle}</p>}
 
           <div className="mt-4 flex flex-wrap gap-2">
+            {recipe.isUserCreated && (
+              <Badge className="border-violet-200 bg-violet-50 text-violet-700">My recipe</Badge>
+            )}
             <Badge className={PROTEIN_BADGE_STYLES[recipe.proteinType]}>
               {PROTEIN_LABELS[recipe.proteinType]}
             </Badge>
@@ -94,6 +98,23 @@ export default async function RecipeDetailPage({
             <PlanToggleButton recipeId={recipe.id} inPlan={planRecipeIds.has(recipe.id)} />
             <FavouriteToggleButton recipeId={recipe.id} isFavourite={recipe.isFavourite} />
             <PrintButton />
+            {recipe.isUserCreated ? (
+              <Link
+                href={`/recipes/${recipe.slug}/edit`}
+                className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+              >
+                ✎ Edit ingredients
+              </Link>
+            ) : (
+              <form action={cloneRecipe.bind(null, recipe.id)}>
+                <button
+                  type="submit"
+                  className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+                >
+                  ⑂ Clone &amp; customize
+                </button>
+              </form>
+            )}
           </div>
 
           {recipe.description && <p className="mt-4 text-zinc-600">{recipe.description}</p>}
@@ -196,6 +217,11 @@ export default async function RecipeDetailPage({
                   <NutritionRow label="Salt" value={`${recipe.saltGrams} g`} />
                 )}
               </dl>
+              {recipe.isUserCreated && (
+                <p className="mt-2 text-xs text-amber-600">
+                  Inherited from the original recipe — may not reflect your edited ingredients.
+                </p>
+              )}
             </div>
           )}
 
