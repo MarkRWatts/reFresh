@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { addRecipesToPlan } from "@/lib/mealplan/actions";
 import { suggestMealCombinations } from "@/lib/mealplan/autoSuggest";
 import { computeSharedIngredients } from "@/lib/recipes/sharedIngredients";
@@ -57,9 +58,7 @@ export default async function SuggestPage({
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
-      <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-700">
-        ← Back to recipes
-      </Link>
+      <BackLink className="text-sm text-zinc-500 hover:text-zinc-700" />
 
       <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Suggest a week</h1>
       <p className="mt-1 text-sm text-zinc-500">

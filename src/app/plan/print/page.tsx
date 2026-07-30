@@ -1,4 +1,4 @@
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import PrintButton from "@/components/PrintButton";
 import { getCurrentPlanRecipes } from "@/lib/mealplan/queries";
 import { computeSharedIngredients } from "@/lib/recipes/sharedIngredients";
@@ -21,9 +21,7 @@ export default async function PlanPrintPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-6 print:px-0 print:py-0">
       <div className="flex items-center justify-between print:hidden">
-        <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-700">
-          ← Back to recipes
-        </Link>
+        <BackLink className="text-sm text-zinc-500 hover:text-zinc-700" />
         <PrintButton label="Print shopping list" />
       </div>
 

@@ -5,6 +5,7 @@ import PlanToggleButton from "@/components/PlanToggleButton";
 import FavouriteToggleButton from "@/components/FavouriteToggleButton";
 import PrintButton from "@/components/PrintButton";
 import IngredientsPanel from "@/components/IngredientsPanel";
+import BackLink from "@/components/BackLink";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
@@ -52,9 +53,7 @@ export default async function RecipeDetailPage({
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
-      <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-700 print:hidden">
-        ← Back to recipes
-      </Link>
+      <BackLink className="text-sm text-zinc-500 hover:text-zinc-700 print:hidden" />
 
       <div className="mt-4 grid gap-6 sm:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="order-2 sm:order-1">
