@@ -129,5 +129,21 @@ export function suggestMealCombinations(
   }
 
   results.sort((a, b) => b.score - a.score);
-  return results.slice(0, topK);
+
+  // Each seed grows its combo independently over the full pool, so the
+  // same individual recipe can easily end up the best marginal add for
+  // several different seeds — without this, the same recipe could appear
+  // in more than one of the returned options. Take the highest-scoring
+  // combos in order, skipping any that reuse a recipe already claimed by
+  // a better (earlier) one.
+  const finalResults: SuggestedCombination[] = [];
+  const usedRecipeIds = new Set<string>();
+  for (const combo of results) {
+    if (combo.recipeIds.some((id) => usedRecipeIds.has(id))) continue;
+    finalResults.push(combo);
+    for (const id of combo.recipeIds) usedRecipeIds.add(id);
+    if (finalResults.length >= topK) break;
+  }
+
+  return finalResults;
 }

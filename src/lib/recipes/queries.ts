@@ -12,6 +12,7 @@ export interface RecipeListParams {
   maxCookMinutes?: number;
   search?: string;
   favouritesOnly?: boolean;
+  showAll?: boolean;
   sort?: SortOption;
   page?: number;
   pageSize?: number;
@@ -38,14 +39,16 @@ export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMM
 
 export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
   // Excludes scraped entries that aren't really a cookable recipe (see
-  // isBrowsable's definition on the Recipe model for the exact rule), and
-  // non-primary members of a detected near-duplicate cluster (see
-  // variantOfId's definition) — the primary is shown in their place, with
-  // a link to the variants from its detail page. Both still reachable
-  // directly by URL; recomputed on re-scrape / re-running detect-variants.
+  // isBrowsable's definition on the Recipe model for the exact rule) —
+  // always applied, since those aren't a "similar recipe," they're broken
+  // data. Non-primary members of a detected near-duplicate cluster (see
+  // variantOfId's definition) are excluded too, UNLESS showAll is set, in
+  // which case variants appear alongside their primary instead of being
+  // hidden. Both still reachable directly by URL either way; recomputed on
+  // re-scrape / re-running detect-variants.
   const where: Prisma.RecipeWhereInput = {
     isBrowsable: true,
-    variantOfId: null,
+    ...(params.showAll ? {} : { variantOfId: null }),
   };
 
   if (params.proteinTypes && params.proteinTypes.length > 0) {

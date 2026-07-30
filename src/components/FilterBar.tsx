@@ -77,6 +77,10 @@ export default function FilterBar({
     navigate({ favouritesOnly: !filters.favouritesOnly });
   }
 
+  function toggleShowAll() {
+    navigate({ showAll: !filters.showAll });
+  }
+
   function selectCaloriePreset(preset: RangePreset) {
     navigate({ minCalories: preset.min, maxCalories: preset.max });
   }
@@ -181,6 +185,15 @@ export default function FilterBar({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={toggleShowAll}
+            title="Also show near-duplicate recipes that are normally hidden behind their primary"
+            className={pillClasses(filters.showAll)}
+          >
+            Show all recipes
+          </button>
 
           <select
             value={filters.sort}
