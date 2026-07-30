@@ -18,6 +18,15 @@ function Badge({ className, children }: { className: string; children: React.Rea
   );
 }
 
+function NutritionRow({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt className="text-zinc-500">{label}</dt>
+      <dd className="text-right font-medium text-zinc-700">{value}</dd>
+    </>
+  );
+}
+
 export default async function RecipeDetailPage({
   params,
 }: {
@@ -28,6 +37,16 @@ export default async function RecipeDetailPage({
   if (!recipe) notFound();
   const steps = parseRecipeSteps(recipe.steps);
   const planRecipeIds = await getCurrentPlanRecipeIds();
+  const hasNutrition = [
+    recipe.calories,
+    recipe.fatGrams,
+    recipe.saturatedFatGrams,
+    recipe.carbsGrams,
+    recipe.sugarGrams,
+    recipe.proteinGrams,
+    recipe.fiberGrams,
+    recipe.saltGrams,
+  ].some((v) => v != null);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
@@ -149,6 +168,37 @@ export default async function RecipeDetailPage({
               ))}
             </ul>
           </div>
+
+          {hasNutrition && (
+            <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
+              <h2 className="text-sm font-semibold text-zinc-900">Nutrition</h2>
+              <p className="mt-0.5 text-xs text-zinc-400">Per serving</p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                {recipe.calories != null && (
+                  <NutritionRow label="Calories" value={`${recipe.calories} kcal`} />
+                )}
+                {recipe.fatGrams != null && <NutritionRow label="Fat" value={`${recipe.fatGrams} g`} />}
+                {recipe.saturatedFatGrams != null && (
+                  <NutritionRow label="Saturates" value={`${recipe.saturatedFatGrams} g`} />
+                )}
+                {recipe.carbsGrams != null && (
+                  <NutritionRow label="Carbs" value={`${recipe.carbsGrams} g`} />
+                )}
+                {recipe.sugarGrams != null && (
+                  <NutritionRow label="Sugar" value={`${recipe.sugarGrams} g`} />
+                )}
+                {recipe.fiberGrams != null && (
+                  <NutritionRow label="Fibre" value={`${recipe.fiberGrams} g`} />
+                )}
+                {recipe.proteinGrams != null && (
+                  <NutritionRow label="Protein" value={`${recipe.proteinGrams} g`} />
+                )}
+                {recipe.saltGrams != null && (
+                  <NutritionRow label="Salt" value={`${recipe.saltGrams} g`} />
+                )}
+              </dl>
+            </div>
+          )}
 
           {recipe.variants.length > 0 && (
             <div className="mt-4 rounded-2xl border border-zinc-200 p-4">

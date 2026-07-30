@@ -34,6 +34,13 @@ export function parseCalories(calories: string | undefined): number | null {
   return match ? Math.round(Number(match[1])) : null;
 }
 
+/** Parses a nutrition field like "17.1 g" into a plain number of grams. */
+export function parseGrams(value: string | undefined): number | null {
+  if (!value) return null;
+  const match = /(\d+(?:\.\d+)?)/.exec(value);
+  return match ? Number(match[1]) : null;
+}
+
 /** recipeYield can be a number, a numeric string, "Serves 2", or an array of these. */
 export function parseServings(
   recipeYield: string | number | string[] | undefined,

@@ -11,6 +11,17 @@ export interface RecipeJsonLd {
   recipeIngredient?: string[];
   nutrition?: {
     calories?: string;
+    fatContent?: string;
+    saturatedFatContent?: string;
+    carbohydrateContent?: string;
+    sugarContent?: string;
+    proteinContent?: string;
+    fiberContent?: string;
+    // Confirmed against real data: this is populated in grams ("2.9 g"),
+    // which is how UK packaging reports salt, not sodium-in-milligrams as
+    // schema.org's field name implies — HelloFresh reuses the field for
+    // its own "Salt" row.
+    sodiumContent?: string;
     [key: string]: unknown;
   };
   aggregateRating?: {

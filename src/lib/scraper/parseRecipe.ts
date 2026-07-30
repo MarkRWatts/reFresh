@@ -2,6 +2,7 @@ import { extractRecipeAppData, extractRecipeSteps, type RecipeStep } from "./app
 import { extractRecipeJsonLd } from "./jsonld";
 import {
   parseCalories,
+  parseGrams,
   parseInstructions,
   parseIsoDurationToMinutes,
   parseRecipeUrlIds,
@@ -26,6 +27,15 @@ export interface ParsedRecipe {
   cookMinutes: number | null;
   servings: number | null;
   calories: number | null;
+  fatGrams: number | null;
+  saturatedFatGrams: number | null;
+  carbsGrams: number | null;
+  sugarGrams: number | null;
+  proteinGrams: number | null;
+  fiberGrams: number | null;
+  // See jsonld.ts: HelloFresh populates this field in grams, matching its
+  // own "Salt" label, not sodium-in-milligrams as the field name implies.
+  saltGrams: number | null;
   proteinType: ProteinType;
   cuisine: string | null;
   category: string | null;
@@ -90,6 +100,13 @@ export function parseRecipePage(finalUrl: string, html: string): ParsedRecipe {
     cookMinutes: parseIsoDurationToMinutes(jsonLd.totalTime),
     servings: parseServings(jsonLd.recipeYield),
     calories: parseCalories(jsonLd.nutrition?.calories),
+    fatGrams: parseGrams(jsonLd.nutrition?.fatContent),
+    saturatedFatGrams: parseGrams(jsonLd.nutrition?.saturatedFatContent),
+    carbsGrams: parseGrams(jsonLd.nutrition?.carbohydrateContent),
+    sugarGrams: parseGrams(jsonLd.nutrition?.sugarContent),
+    proteinGrams: parseGrams(jsonLd.nutrition?.proteinContent),
+    fiberGrams: parseGrams(jsonLd.nutrition?.fiberContent),
+    saltGrams: parseGrams(jsonLd.nutrition?.sodiumContent),
     proteinType,
     cuisine: toStringOrNull(jsonLd.recipeCuisine),
     category: toStringOrNull(jsonLd.recipeCategory),

@@ -50,6 +50,17 @@ model Recipe {
   cookMinutes    Int?
   servings       Int?
   calories       Int?
+  // Per-serving nutrition from the JSON-LD's NutritionInformation block
+  // (all grams). saltGrams maps from the schema.org field `sodiumContent`,
+  // which HelloFresh actually populates with its own "Salt" label's value
+  // in grams, not sodium-in-milligrams as the field name implies.
+  fatGrams          Float?
+  saturatedFatGrams Float?
+  carbsGrams        Float?
+  sugarGrams        Float?
+  proteinGrams      Float?
+  fiberGrams        Float?
+  saltGrams         Float?
   proteinType    ProteinType @default(UNKNOWN)
   proteinTypeManualOverride Boolean @default(false)
   cuisine        String?

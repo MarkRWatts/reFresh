@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "Recipe" ADD COLUMN     "carbsGrams" DOUBLE PRECISION,
+ADD COLUMN     "fatGrams" DOUBLE PRECISION,
+ADD COLUMN     "fiberGrams" DOUBLE PRECISION,
+ADD COLUMN     "proteinGrams" DOUBLE PRECISION,
+ADD COLUMN     "saltGrams" DOUBLE PRECISION,
+ADD COLUMN     "saturatedFatGrams" DOUBLE PRECISION,
+ADD COLUMN     "sugarGrams" DOUBLE PRECISION;
