@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import PlanDrawerRoot from "@/components/PlanDrawerRoot";
 import "./globals.css";
 
@@ -32,7 +33,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-zinc-50 font-sans text-zinc-900">
         <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center px-4 py-3 sm:px-6">
-            <Link href="/" className="text-lg font-semibold tracking-tight">
+            <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+              <Logo className="h-6 w-6" />
               re<span className="text-emerald-600">:</span>Fresh
             </Link>
           </div>
