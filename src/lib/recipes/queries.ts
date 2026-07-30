@@ -34,7 +34,7 @@ const RECIPE_SUMMARY_SELECT = {
 
 export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMMARY_SELECT }>;
 
-function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
+export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
   // Excludes scraped entries that aren't really a cookable recipe (see
   // isBrowsable's definition on the Recipe model for the exact rule), and
   // non-primary members of a detected near-duplicate cluster (see
@@ -113,6 +113,53 @@ export async function listRecipes(params: RecipeListParams = {}): Promise<Recipe
   ]);
 
   return { recipes, total, page, pageSize };
+}
+
+export interface RecipeIngredientSetForSuggestion {
+  id: string;
+  name: string;
+  slug: string;
+  imageUrl: string | null;
+  ratingValue: number | null;
+  ingredientIds: string[];
+}
+
+/**
+ * The candidate pool for the auto-suggest optimizer: every recipe
+ * matching the given filters (reusing the exact same buildWhere as the
+ * browse grid, so "suggest a week" naturally scopes to whatever the user
+ * was already filtering by), with its canonical ingredient ids attached.
+ * Unpaginated but capped — a few hundred candidates is already enough for
+ * the greedy optimizer to find good combinations, and this needs to load
+ * entirely into memory to run.
+ */
+export async function listRecipeIngredientSetsForSuggestion(
+  params: RecipeListParams,
+  cap = 400,
+): Promise<RecipeIngredientSetForSuggestion[]> {
+  const where = buildWhere(params);
+  const recipes = await prisma.recipe.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      imageUrl: true,
+      ratingValue: true,
+      ingredients: { select: { ingredientId: true } },
+    },
+    orderBy: { ratingValue: "desc" },
+    take: cap,
+  });
+
+  return recipes.map((r) => ({
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    imageUrl: r.imageUrl,
+    ratingValue: r.ratingValue,
+    ingredientIds: r.ingredients.map((i) => i.ingredientId),
+  }));
 }
 
 /** Distinct cuisine values present in the DB, for populating a cuisine filter. */

@@ -1,9 +1,15 @@
+import Link from "next/link";
 import FilterBar from "@/components/FilterBar";
 import Pagination from "@/components/Pagination";
 import RecipeCard from "@/components/RecipeCard";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { listCuisines, listRecipes } from "@/lib/recipes/queries";
-import { parseFilters, toListParams, type RawSearchParams } from "@/lib/recipes/searchParamsUtil";
+import {
+  buildFilterQueryString,
+  parseFilters,
+  toListParams,
+  type RawSearchParams,
+} from "@/lib/recipes/searchParamsUtil";
 
 const PAGE_SIZE = 24;
 
@@ -25,9 +31,17 @@ export default async function Home({
       <FilterBar filters={filters} cuisines={cuisines} />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
-        <p className="mb-4 text-sm text-zinc-500">
-          {total.toLocaleString()} recipe{total === 1 ? "" : "s"}
-        </p>
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-sm text-zinc-500">
+            {total.toLocaleString()} recipe{total === 1 ? "" : "s"}
+          </p>
+          <Link
+            href={`/suggest${buildFilterQueryString(filters)}`}
+            className="rounded-full border border-emerald-600 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            ✨ Suggest a week
+          </Link>
+        </div>
 
         {recipes.length === 0 ? (
           <p className="py-16 text-center text-zinc-500">
