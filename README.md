@@ -6,6 +6,8 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 
 ![Card browser with the filter bar, protein-type colour coding, and favourite/plan toggles](docs/screenshot.png)
 
+> **About the data.** This is a personal, non-commercial project for my own meal planning. The scraper only fetches pages `hellofresh.co.uk/robots.txt` explicitly permits crawling, reading the same public sitemap and per-page structured data (`schema.org/Recipe` JSON-LD) any search engine would. No scraped content, database dump, or cache is included in this repository — `.cache/` and `db-backups/` are gitignored — and nothing here is redistributed publicly; the app itself only ever runs locally. If you're from HelloFresh and have a concern about this, please open an issue.
+
 ## Contents
 
 - [Features](#features)
@@ -17,6 +19,7 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - [Data model](#data-model)
 - [How it works](#how-it-works)
 - [Known limitations](#known-limitations)
+- [License](#license)
 
 ## Features
 
@@ -168,3 +171,7 @@ npx prisma migrate resolve --applied <timestamp>_<name>
 - Protein-type classification and the variant-detection similarity threshold are both heuristics, tuned by spot-checking real data rather than exhaustively validated; expect occasional misclassifications.
 - No true cross-unit quantity conversion in the shopping list (e.g. tbsp → ml) — an ingredient specified in two different units across recipes shows as two separate totals.
 - Custom (cloned) recipes only support editing the ingredient list so far — steps, cook time, servings, etc. still come from the original.
+
+## License
+
+GNU General Public License v3.0 — see [`LICENSE`](LICENSE). Applies to this project's own code; it doesn't grant any rights to HelloFresh's recipe content, which this project never redistributes (see the data note above).
