@@ -59,30 +59,6 @@ export function weightedOverlap(
   return denominator > 0 ? sharedWeight / denominator : 0;
 }
 
-class UnionFind {
-  private parent = new Map<string, string>();
-
-  find(x: string): string {
-    if (!this.parent.has(x)) this.parent.set(x, x);
-    let root = x;
-    while (this.parent.get(root) !== root) root = this.parent.get(root)!;
-    // path compression
-    let cur = x;
-    while (this.parent.get(cur) !== root) {
-      const next = this.parent.get(cur)!;
-      this.parent.set(cur, root);
-      cur = next;
-    }
-    return root;
-  }
-
-  union(a: string, b: string): void {
-    const rootA = this.find(a);
-    const rootB = this.find(b);
-    if (rootA !== rootB) this.parent.set(rootA, rootB);
-  }
-}
-
 export interface VariantDetectionOptions {
   /** Minimum raw (unweighted) shared ingredients before bothering to compute the weighted score — keeps candidate generation cheap. */
   minSharedIngredients?: number;
@@ -99,6 +75,20 @@ export interface RecipeForVariantDetection extends RecipeIngredientSet {
  * Returns a map of recipeId -> primaryRecipeId for every recipe that's a
  * non-primary member of a detected variant cluster. Recipes not in the
  * map are either unclustered or are themselves the cluster's primary.
+ *
+ * Clustering is "direct-to-primary" (a star, not transitive union-find):
+ * recipes are considered as primaries in order of decreasing completeness,
+ * and a recipe only ever becomes a variant of a primary it is *itself*
+ * directly similar to. An earlier union-find version chained recipes
+ * together through intermediate near-duplicates (A~B~C implies A and C are
+ * in the same cluster even if A and C share almost nothing), which was
+ * fine at the ~1,000-recipe tuning sample but collapsed catastrophically
+ * on the full ~16k catalog — far more recipes meant far more chains, and
+ * one run merged HALF the browsable catalog into a handful of superclusters
+ * (e.g. an "Asian Inspired Rice" cluster pulling in an unrelated "MCB Pork
+ * Meatball Curry" via a chain of intermediate rice dishes). Requiring every
+ * variant to be directly verified against its specific primary eliminates
+ * that failure mode structurally, regardless of catalog size.
  */
 export function detectVariants(
   recipes: RecipeForVariantDetection[],
@@ -122,10 +112,21 @@ export function detectVariants(
   }
 
   const byId = new Map(recipes.map((r) => [r.id, r]));
-  const uf = new UnionFind();
-  const comparedPairs = new Set<string>();
 
-  for (const recipe of recipes) {
+  // Highest-completeness recipes get first claim to be a primary, so a
+  // "best" member of a near-duplicate group is preferred over a lesser one
+  // that happens to be processed first.
+  const ordered = [...recipes].sort((a, b) => {
+    if (b.completenessScore !== a.completenessScore) return b.completenessScore - a.completenessScore;
+    return a.id.localeCompare(b.id);
+  });
+
+  const result = new Map<string, string>();
+  const claimed = new Set<string>();
+
+  for (const recipe of ordered) {
+    if (claimed.has(recipe.id)) continue; // already a variant of an earlier (better) primary
+
     const rawSharedCounts = new Map<string, number>();
     for (const ingredientId of new Set(recipe.ingredientIds)) {
       for (const otherId of invertedIndex.get(ingredientId) ?? []) {
@@ -136,38 +137,16 @@ export function detectVariants(
 
     for (const [otherId, rawShared] of rawSharedCounts) {
       if (rawShared < minSharedIngredients) continue;
-      const pairKey = [recipe.id, otherId].sort().join("|");
-      if (comparedPairs.has(pairKey)) continue;
-      comparedPairs.add(pairKey);
+      if (claimed.has(otherId) || otherId === recipe.id) continue;
 
       const other = byId.get(otherId);
       if (!other) continue;
 
       const overlap = weightedOverlap(recipe.ingredientIds, other.ingredientIds, idf);
       if (overlap >= similarityThreshold) {
-        uf.union(recipe.id, otherId);
+        result.set(otherId, recipe.id);
+        claimed.add(otherId);
       }
-    }
-  }
-
-  // Group by cluster root, then choose each cluster's primary.
-  const clusters = new Map<string, RecipeForVariantDetection[]>();
-  for (const recipe of recipes) {
-    const root = uf.find(recipe.id);
-    const group = clusters.get(root);
-    if (group) group.push(recipe);
-    else clusters.set(root, [recipe]);
-  }
-
-  const result = new Map<string, string>();
-  for (const members of clusters.values()) {
-    if (members.length < 2) continue;
-    const primary = [...members].sort((a, b) => {
-      if (b.completenessScore !== a.completenessScore) return b.completenessScore - a.completenessScore;
-      return a.id.localeCompare(b.id);
-    })[0];
-    for (const member of members) {
-      if (member.id !== primary.id) result.set(member.id, primary.id);
     }
   }
 
