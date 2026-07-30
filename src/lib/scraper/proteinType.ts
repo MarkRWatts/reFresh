@@ -4,13 +4,15 @@ export type ProteinType =
   | "BEEF"
   | "LAMB"
   | "PORK"
+  | "DUCK"
+  | "VENISON"
   | "MEAT_OTHER"
   | "FISH"
   | "VEGETARIAN"
   | "VEGAN"
   | "UNKNOWN";
 
-type MeatSpecies = "CHICKEN" | "TURKEY" | "BEEF" | "LAMB" | "PORK" | "MEAT_OTHER";
+type MeatSpecies = "CHICKEN" | "TURKEY" | "BEEF" | "LAMB" | "PORK" | "DUCK" | "VENISON" | "MEAT_OTHER";
 
 // Terms that mean "this ingredient is a meat/fish substitute", so their
 // presence should NOT trigger a meat/fish match (e.g. "meat-free mince").
@@ -46,7 +48,9 @@ const SPECIES_KEYWORDS: Record<MeatSpecies, string[]> = {
     "pepperoni",
     "nduja",
   ],
-  MEAT_OTHER: ["duck", "venison", "rabbit", "goat", "quail", "pheasant", "wild boar"],
+  DUCK: ["duck"],
+  VENISON: ["venison"],
+  MEAT_OTHER: ["rabbit", "goat", "quail", "pheasant", "wild boar"],
 };
 
 // Cut/prep words that say nothing about species by themselves ("mince",
@@ -65,7 +69,16 @@ const AMBIGUOUS_CUT_FALLBACKS: { keyword: string; species: MeatSpecies }[] = [
 // Tie-break order when an ingredient list matches more than one species
 // (whichever species has the most matching ingredient lines wins; ties go
 // to whichever comes first here).
-const SPECIES_PRIORITY: MeatSpecies[] = ["CHICKEN", "BEEF", "PORK", "LAMB", "TURKEY", "MEAT_OTHER"];
+const SPECIES_PRIORITY: MeatSpecies[] = [
+  "CHICKEN",
+  "BEEF",
+  "PORK",
+  "LAMB",
+  "TURKEY",
+  "DUCK",
+  "VENISON",
+  "MEAT_OTHER",
+];
 
 // Includes every species in HelloFresh's own seafood-recipe collection
 // pages (Salmon, Cod, Hake, Prawn, Basa, Haddock, Crab, Coley, Sea Bream,

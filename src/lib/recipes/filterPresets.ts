@@ -6,6 +6,8 @@ export const PROTEIN_TYPE_OPTIONS: { value: ProteinType; label: string }[] = [
   { value: "BEEF", label: "Beef" },
   { value: "LAMB", label: "Lamb" },
   { value: "PORK", label: "Pork" },
+  { value: "DUCK", label: "Duck" },
+  { value: "VENISON", label: "Venison" },
   { value: "MEAT_OTHER", label: "Other Meat" },
   { value: "FISH", label: "Fish" },
   { value: "VEGETARIAN", label: "Vegetarian" },
@@ -72,6 +74,14 @@ export const PROTEIN_COLORS: Record<ProteinType, ProteinColorSet> = {
     badge: "bg-indigo-50 text-indigo-700 border-indigo-200",
     active: "bg-indigo-600 text-white border-indigo-600",
   },
+  DUCK: {
+    badge: "bg-rose-50 text-rose-700 border-rose-200",
+    active: "bg-rose-600 text-white border-rose-600",
+  },
+  VENISON: {
+    badge: "bg-amber-50 text-amber-800 border-amber-300",
+    active: "bg-amber-700 text-white border-amber-700",
+  },
   MEAT_OTHER: {
     badge: "bg-stone-100 text-stone-700 border-stone-300",
     active: "bg-stone-600 text-white border-stone-600",
@@ -107,6 +117,8 @@ export const PROTEIN_LABELS: Record<ProteinType, string> = {
   BEEF: "Beef",
   LAMB: "Lamb",
   PORK: "Pork",
+  DUCK: "Duck",
+  VENISON: "Venison",
   MEAT_OTHER: "Other Meat",
   FISH: "Fish",
   VEGETARIAN: "Vegetarian",

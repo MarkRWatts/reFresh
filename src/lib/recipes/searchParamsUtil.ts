@@ -13,6 +13,8 @@ const VALID_PROTEIN_TYPES: ProteinType[] = [
   "BEEF",
   "LAMB",
   "PORK",
+  "DUCK",
+  "VENISON",
   "MEAT_OTHER",
   "FISH",
   "VEGETARIAN",

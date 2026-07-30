@@ -15,8 +15,10 @@ enum ProteinType {
   BEEF
   LAMB
   PORK
-  // Meat recipes that don't cleanly resolve to one of the five species
-  // above (duck, venison, rabbit, goat, etc.) — classifyProteinType's
+  DUCK
+  VENISON
+  // Meat recipes that don't cleanly resolve to one of the species above
+  // (rabbit, goat, quail, pheasant, wild boar, etc.) — classifyProteinType's
   // keyword heuristic, see proteinType.ts.
   MEAT_OTHER
   FISH
