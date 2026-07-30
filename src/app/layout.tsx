@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   description: "Browse HelloFresh recipes and plan a week that shares ingredients, not waste.",
 };
 
+// Every page renders PlanDrawerRoot, which queries the DB — nothing under
+// this layout can be statically prerendered (there's no DB at build time).
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{

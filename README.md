@@ -14,6 +14,7 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - [Stack](#stack)
 - [Getting started](#getting-started)
 - [Populating the database](#populating-the-database)
+- [Deploying with Docker](#deploying-with-docker)
 - [npm scripts](#npm-scripts)
 - [Project structure](#project-structure)
 - [Data model](#data-model)
@@ -36,14 +37,14 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - **Next.js 16** (App Router, TypeScript) + **Tailwind v4** — almost entirely Server Components and Server Actions; the few client islands (toggle buttons, the plan drawer, filter bar, print button, servings pickers) are called out explicitly in the code.
 - **Prisma 7** + **PostgreSQL**, via `@prisma/adapter-pg` (Prisma 7 requires an explicit driver adapter).
 - **A standalone scraper** (`scripts/scrape.ts`), decoupled from the request path: it populates Postgres from HelloFresh's public sitemap + per-page `schema.org/Recipe` JSON-LD (plus an internal app-data blob for richer per-step photos). The app itself never talks to HelloFresh live.
-- No hosting/deployment set up yet — this has only run locally so far.
+- Runs locally via `npm run dev`, or containerized via the included `Dockerfile` + `docker-compose.yml` — see [Deploying with Docker](#deploying-with-docker).
 
 ## Getting started
 
 Prerequisites: Node.js, a local PostgreSQL server.
 
 ```bash
-brew services start postgresql@16   # this machine has no Docker
+brew services start postgresql@16   # or use Docker instead — see below
 createdb refresh_dev
 npm install
 cp .env.example .env                # adjust DATABASE_URL if your setup differs
@@ -72,6 +73,35 @@ Two ways to get real data, in order of preference:
    npm run detect-variants             # cluster near-duplicate recipes (run after any (re-)scrape)
    ```
    Every fetched page is cached to disk (`.cache/hellofresh/html/`, gitignored), so re-running the scraper — or changing parsing/classification logic and running `npm run reprocess` — never re-hits the network for a page it's already seen. `npm run detect-variants` should be re-run any time the *browsable* recipe set changes (a fresh crawl, or a `computeIsBrowsable`/classification change), since it resets and recomputes `Recipe.variantOfId` for the whole catalog each time.
+
+## Deploying with Docker
+
+For running this somewhere other than a dev machine — a home server or NAS — `Dockerfile` + `docker-compose.yml` build the app and run it alongside its own Postgres container. The image keeps the full `node_modules` tree (including `tsx`) rather than Next's pruned "standalone" output, specifically so the scraper scripts run inside the container the same way they do locally.
+
+```bash
+cp .env.docker.example .env.docker     # set a real POSTGRES_PASSWORD
+docker compose --env-file .env.docker up -d --build
+```
+
+The env file is named `.env.docker`, not `.env` — `.env` is the dev-server config (`DATABASE_URL` for `npm run dev`), and if you're building the image from a checkout that also runs the dev server locally (e.g. testing on the same machine you develop on), a plain `.env` would silently collide with it. `--env-file .env.docker` is needed on every `docker compose` invocation in this directory, not just `up`.
+
+First boot: the `app` container runs `prisma migrate deploy` automatically before starting `next start`, so the schema exists but is empty. Populate it the same way as [above](#populating-the-database), just through `docker compose exec`:
+
+```bash
+docker compose --env-file .env.docker exec app npm run scrape -- --sample=50   # sanity check
+docker compose --env-file .env.docker exec app npm run scrape                   # full crawl
+docker compose --env-file .env.docker exec app npm run detect-variants
+```
+
+— or copy a snapshot onto the host into the `db-backups` volume (see below) and run `docker compose --env-file .env.docker exec app npm run db:restore`.
+
+The app listens on port 3000 (`http://<host>:3000`); edit the `ports:` mapping in `docker-compose.yml` for a different host port. Three named volumes persist state across container rebuilds: `pgdata` (the database itself), `scraper-cache` (`.cache/`, so re-scrapes/reprocesses don't redownload pages already fetched), and `db-backups` (`npm run db:snapshot` output). On TrueNAS specifically, it's worth pointing these at a ZFS dataset via bind mounts instead of Docker-managed named volumes, so they pick up TrueNAS's own snapshot/replication — e.g. swap `pgdata:` for `/mnt/<pool>/refresh/pgdata:/var/lib/postgresql/data` under the `db` service.
+
+To keep the catalog current, schedule `npm run scrape` (checks the sitemap for new/changed recipes) or `npm run reprocess` (zero network, just reapplies current parsing logic) periodically — e.g. a TrueNAS cron job (System Settings → Advanced → Cron Jobs) running:
+
+```bash
+docker compose -f /path/to/refresh/docker-compose.yml --env-file /path/to/refresh/.env.docker exec -T app npm run scrape
+```
 
 ## npm scripts
 

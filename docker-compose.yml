@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-refresh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-refresh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-refresh}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-refresh}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-refresh}?schema=public
+    ports:
+      - "3000:3000"
+    volumes:
+      # Scraper's HTML cache — keeps re-scrapes/reprocesses from re-downloading
+      # every recipe page. Safe to delete if you want a clean slate.
+      - scraper-cache:/app/.cache
+      # Output of `npm run db:snapshot`.
+      - db-backups:/app/db-backups
+
+volumes:
+  pgdata:
+  scraper-cache:
+  db-backups:
