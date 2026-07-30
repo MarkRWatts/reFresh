@@ -17,6 +17,10 @@ export interface PlannedRecipe {
   name: string;
   subtitle: string | null;
   imageUrl: string | null;
+  /** The recipe's own scraped serving count (always 2 for this catalog, but not hardcoded). */
+  baseServings: number | null;
+  /** Per-plan override from MealPlanRecipe.servings — null means "use baseServings". */
+  planServings: number | null;
 }
 
 export async function getCurrentPlanRecipes(): Promise<PlannedRecipe[]> {
@@ -24,11 +28,20 @@ export async function getCurrentPlanRecipes(): Promise<PlannedRecipe[]> {
   const rows = await prisma.mealPlanRecipe.findMany({
     where: { mealPlanId: plan.id },
     select: {
-      recipe: { select: { id: true, slug: true, name: true, subtitle: true, imageUrl: true } },
+      servings: true,
+      recipe: { select: { id: true, slug: true, name: true, subtitle: true, imageUrl: true, servings: true } },
     },
     orderBy: { id: "asc" },
   });
-  return rows.map((r) => r.recipe);
+  return rows.map((r) => ({
+    id: r.recipe.id,
+    slug: r.recipe.slug,
+    name: r.recipe.name,
+    subtitle: r.recipe.subtitle,
+    imageUrl: r.recipe.imageUrl,
+    baseServings: r.recipe.servings,
+    planServings: r.servings,
+  }));
 }
 
 /** Just the recipe ids currently planned, for cheaply checking "is this recipe already in the plan" while rendering cards. */

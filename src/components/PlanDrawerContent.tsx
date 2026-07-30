@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentPlanRecipes } from "@/lib/mealplan/queries";
 import { removeRecipeFromPlan } from "@/lib/mealplan/actions";
 import { computeSharedIngredients } from "@/lib/recipes/sharedIngredients";
+import MealPlanServingsSelect from "@/components/MealPlanServingsSelect";
 
 function formatQuantity(unit: string | null, totalQuantity: number): string {
   const rounded = Math.round(totalQuantity * 100) / 100;
@@ -20,7 +21,13 @@ export default async function PlanDrawerContent() {
     );
   }
 
-  const { ingredientGroups } = await computeSharedIngredients(recipes.map((r) => r.id));
+  const servingsOverrides = new Map(
+    recipes.filter((r) => r.planServings != null).map((r) => [r.id, r.planServings!]),
+  );
+  const { ingredientGroups } = await computeSharedIngredients(
+    recipes.map((r) => r.id),
+    servingsOverrides,
+  );
   const sharedGroups = ingredientGroups.filter((g) => g.isShared);
 
   return (
@@ -41,6 +48,12 @@ export default async function PlanDrawerContent() {
               >
                 {recipe.name}
               </Link>
+              {recipe.baseServings != null && (
+                <MealPlanServingsSelect
+                  recipeId={recipe.id}
+                  servings={recipe.planServings ?? recipe.baseServings}
+                />
+              )}
               <form action={removeRecipeFromPlan.bind(null, recipe.id)}>
                 <button
                   type="submit"

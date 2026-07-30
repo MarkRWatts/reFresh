@@ -51,9 +51,17 @@ export interface SharedIngredientsResult {
  * render a consolidated shopping list. Quantities are summed within
  * matching units (summarizeQuantities); true cross-unit conversion
  * (e.g. tbsp -> ml) is still out of scope.
+ *
+ * `servingsOverrides` lets a caller (the planner) scale a recipe's
+ * ingredient quantities to a serving count other than the recipe's own
+ * base — e.g. cooking a 2-serving recipe for 4 people doubles every
+ * quantity before it's summed into the shared total. A recipe not present
+ * in the map (or a recipe with no known base `servings` to scale from)
+ * contributes its raw scraped quantities unchanged.
  */
 export async function computeSharedIngredients(
   recipeIds: string[],
+  servingsOverrides: Map<string, number> = new Map(),
 ): Promise<SharedIngredientsResult> {
   if (recipeIds.length === 0) {
     return { recipes: [], ingredientGroups: [] };
@@ -61,7 +69,7 @@ export async function computeSharedIngredients(
 
   const recipes = await prisma.recipe.findMany({
     where: { id: { in: recipeIds } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, servings: true },
   });
 
   const recipeIngredients = await prisma.recipeIngredient.findMany({
@@ -69,7 +77,7 @@ export async function computeSharedIngredients(
     include: { ingredient: true },
   });
 
-  const recipeNameById = new Map(recipes.map((r) => [r.id, r.name]));
+  const recipeById = new Map(recipes.map((r) => [r.id, r]));
   const groupsByIngredientId = new Map<string, IngredientGroup>();
 
   for (const ri of recipeIngredients) {
@@ -85,10 +93,15 @@ export async function computeSharedIngredients(
       };
       groupsByIngredientId.set(ri.ingredientId, group);
     }
+
+    const baseServings = recipeById.get(ri.recipeId)?.servings;
+    const targetServings = servingsOverrides.get(ri.recipeId);
+    const multiplier = baseServings && targetServings ? targetServings / baseServings : 1;
+
     group.entries.push({
       recipeId: ri.recipeId,
-      recipeName: recipeNameById.get(ri.recipeId) ?? "Unknown recipe",
-      quantity: ri.quantity,
+      recipeName: recipeById.get(ri.recipeId)?.name ?? "Unknown recipe",
+      quantity: ri.quantity != null ? ri.quantity * multiplier : null,
       unit: ri.unit,
       rawText: ri.rawText,
     });

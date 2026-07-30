@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import PlanToggleButton from "@/components/PlanToggleButton";
 import FavouriteToggleButton from "@/components/FavouriteToggleButton";
 import PrintButton from "@/components/PrintButton";
+import IngredientsPanel from "@/components/IngredientsPanel";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
@@ -158,18 +159,15 @@ export default async function RecipeDetailPage({
             )}
           </div>
 
-          <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
-            <h2 className="text-sm font-semibold text-zinc-900">Ingredients</h2>
-            <ul className="mt-2 space-y-1.5 text-sm text-zinc-600">
-              {recipe.ingredients.map((ri) => (
-                <li key={ri.id}>
-                  {ri.quantity != null && <span className="text-zinc-400">{ri.quantity} </span>}
-                  {ri.unit && <span className="text-zinc-400">{ri.unit} </span>}
-                  {ri.ingredient.canonicalName}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <IngredientsPanel
+            baseServings={recipe.servings}
+            ingredients={recipe.ingredients.map((ri) => ({
+              id: ri.id,
+              quantity: ri.quantity,
+              unit: ri.unit,
+              name: ri.ingredient.canonicalName,
+            }))}
+          />
 
           {hasNutrition && (
             <div className="mt-4 rounded-2xl border border-zinc-200 p-4">

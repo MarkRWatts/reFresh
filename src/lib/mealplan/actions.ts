@@ -26,6 +26,17 @@ export async function removeRecipeFromPlan(recipeId: string): Promise<void> {
   revalidatePath("/", "layout");
 }
 
+export async function setMealPlanRecipeServings(recipeId: string, formData: FormData): Promise<void> {
+  const raw = Number(formData.get("servings"));
+  const servings = Number.isFinite(raw) && raw > 0 ? raw : null;
+  const plan = await getOrCreateCurrentMealPlan();
+  await prisma.mealPlanRecipe.update({
+    where: { mealPlanId_recipeId: { mealPlanId: plan.id, recipeId } },
+    data: { servings },
+  });
+  revalidatePath("/", "layout");
+}
+
 /** Adds every recipe in a suggested combination to the plan in one go, then sends the user home to see it populated in the drawer. */
 export async function addRecipesToPlan(recipeIds: string[]): Promise<void> {
   const plan = await getOrCreateCurrentMealPlan();

@@ -10,9 +10,12 @@ function formatQuantity(unit: string | null, totalQuantity: number): string {
 
 export default async function PlanPrintPage() {
   const recipes = await getCurrentPlanRecipes();
+  const servingsOverrides = new Map(
+    recipes.filter((r) => r.planServings != null).map((r) => [r.id, r.planServings!]),
+  );
   const { ingredientGroups } =
     recipes.length > 0
-      ? await computeSharedIngredients(recipes.map((r) => r.id))
+      ? await computeSharedIngredients(recipes.map((r) => r.id), servingsOverrides)
       : { ingredientGroups: [] };
 
   return (
@@ -38,9 +41,17 @@ export default async function PlanPrintPage() {
               Recipes
             </h2>
             <ul className="mt-2 text-sm text-zinc-700">
-              {recipes.map((recipe) => (
-                <li key={recipe.id}>{recipe.name}</li>
-              ))}
+              {recipes.map((recipe) => {
+                const effectiveServings = recipe.planServings ?? recipe.baseServings;
+                return (
+                  <li key={recipe.id}>
+                    {recipe.name}
+                    {effectiveServings != null && effectiveServings !== recipe.baseServings && (
+                      <span className="text-zinc-400"> ({effectiveServings}p)</span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

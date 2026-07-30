@@ -165,6 +165,10 @@ model MealPlanRecipe {
   id         String   @id @default(cuid())
   mealPlanId String
   recipeId   String
+  // Per-plan serving-count override. Null means "use the recipe's own base
+  // servings" (i.e. no scaling) — this is the common case, so recipes are
+  // added to a plan without needing to know their base servings up front.
+  servings   Int?
 
   mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
   recipe   Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
