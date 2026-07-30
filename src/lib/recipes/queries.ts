@@ -11,6 +11,7 @@ export interface RecipeListParams {
   minCookMinutes?: number;
   maxCookMinutes?: number;
   search?: string;
+  favouritesOnly?: boolean;
   sort?: SortOption;
   page?: number;
   pageSize?: number;
@@ -30,6 +31,7 @@ const RECIPE_SUMMARY_SELECT = {
   cuisine: true,
   ratingValue: true,
   ratingCount: true,
+  isFavourite: true,
 } satisfies Prisma.RecipeSelect;
 
 export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMMARY_SELECT }>;
@@ -69,6 +71,9 @@ export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
       { name: { contains: params.search, mode: "insensitive" } },
       { subtitle: { contains: params.search, mode: "insensitive" } },
     ];
+  }
+  if (params.favouritesOnly) {
+    where.isFavourite = true;
   }
 
   return where;

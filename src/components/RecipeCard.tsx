@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import PlanToggleButton from "@/components/PlanToggleButton";
+import FavouriteToggleButton from "@/components/FavouriteToggleButton";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import type { RecipeSummary } from "@/lib/recipes/queries";
@@ -23,8 +24,8 @@ export default function RecipeCard({
 }) {
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white transition-shadow hover:shadow-md">
-      <Link href={`/recipes/${recipe.slug}`} className="contents">
-        <div className="relative aspect-[4/3] w-full bg-zinc-100">
+      <div className="relative aspect-[4/3] w-full bg-zinc-100">
+        <Link href={`/recipes/${recipe.slug}`} className="absolute inset-0">
           {hasUsableImage(recipe.imageUrl) ? (
             <Image
               src={recipe.imageUrl}
@@ -36,8 +37,11 @@ export default function RecipeCard({
           ) : (
             <RecipeImagePlaceholder />
           )}
+        </Link>
+        <div className="absolute right-2 top-2">
+          <FavouriteToggleButton recipeId={recipe.id} isFavourite={recipe.isFavourite} compact />
         </div>
-      </Link>
+      </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="flex items-start justify-between gap-2">

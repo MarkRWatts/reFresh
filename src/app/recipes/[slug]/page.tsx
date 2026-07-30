@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import PlanToggleButton from "@/components/PlanToggleButton";
+import FavouriteToggleButton from "@/components/FavouriteToggleButton";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
@@ -69,8 +70,9 @@ export default async function RecipeDetailPage({
             )}
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <PlanToggleButton recipeId={recipe.id} inPlan={planRecipeIds.has(recipe.id)} />
+            <FavouriteToggleButton recipeId={recipe.id} isFavourite={recipe.isFavourite} />
           </div>
 
           {recipe.description && <p className="mt-4 text-zinc-600">{recipe.description}</p>}

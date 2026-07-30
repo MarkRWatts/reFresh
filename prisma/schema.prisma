@@ -89,6 +89,10 @@ model Recipe {
   variantOfId    String?
   variantOf      Recipe?     @relation("RecipeVariants", fields: [variantOfId], references: [id])
   variants       Recipe[]    @relation("RecipeVariants")
+  // Single-user favourite flag (no auth, no per-user table — same
+  // single-implicit-owner pattern as MealPlan). Toggled from the card and
+  // detail page; also usable as a filter.
+  isFavourite    Boolean     @default(false)
   lastScrapedAt  DateTime    @default(now())
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -102,6 +106,7 @@ model Recipe {
   @@index([cookMinutes])
   @@index([isBrowsable])
   @@index([variantOfId])
+  @@index([isFavourite])
 }
 
 model Ingredient {

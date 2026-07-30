@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { ProteinType } from "@/generated/prisma/client";
+import HeartIcon from "@/components/icons/HeartIcon";
 import {
   CALORIE_PRESETS,
   COOK_TIME_PRESETS,
@@ -30,6 +31,15 @@ function proteinPillClasses(value: ProteinType, active: boolean): string {
   return [
     "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
     active ? colors.active : `${colors.badge} hover:opacity-75`,
+  ].join(" ");
+}
+
+function favouritesPillClasses(active: boolean): string {
+  return [
+    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+    active
+      ? "border-pink-500 bg-pink-50 text-pink-600"
+      : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400",
   ].join(" ");
 }
 
@@ -61,6 +71,10 @@ export default function FilterBar({
       ? filters.proteinTypes.filter((p) => p !== value)
       : [...filters.proteinTypes, value];
     navigate({ proteinTypes });
+  }
+
+  function toggleFavouritesOnly() {
+    navigate({ favouritesOnly: !filters.favouritesOnly });
   }
 
   function selectCaloriePreset(preset: RangePreset) {
@@ -108,6 +122,15 @@ export default function FilterBar({
             placeholder="Search recipes..."
             className="w-full rounded-full border border-zinc-300 px-4 py-1.5 text-sm sm:w-56"
           />
+
+          <button
+            type="button"
+            onClick={toggleFavouritesOnly}
+            className={favouritesPillClasses(filters.favouritesOnly)}
+          >
+            <HeartIcon filled={filters.favouritesOnly} className="h-4 w-4" />
+            Favourites
+          </button>
 
           {PROTEIN_TYPE_OPTIONS.map((option) => (
             <button
