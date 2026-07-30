@@ -99,6 +99,20 @@ const UNIT_WORDS = [
 ];
 const UNIT_WORD_SET = new Set(UNIT_WORDS.map((u) => u.toLowerCase()));
 
+// "unit(s)"/"units"/"unit" are HelloFresh's placeholder for "just a plain
+// count, no real unit" (e.g. "1 unit(s) Garlic Clove") — recognized as a
+// unit token so it's stripped out of the ingredient name correctly, but
+// normalized to no unit rather than kept as the literal string "unit(s)".
+// This also fixes a real shopping-list bug: without it, the same
+// ingredient tracked as "unit(s)" in one recipe and genuinely unitless in
+// another ("2 Eggs" vs "2 unit(s) Eggs") summed into two separate totals
+// instead of being combined into one.
+const PLACEHOLDER_UNIT_WORDS = new Set(["unit(s)", "units", "unit"]);
+
+function normalizeUnit(unit: string | null): string | null {
+  return unit !== null && PLACEHOLDER_UNIT_WORDS.has(unit) ? null : unit;
+}
+
 const UNICODE_FRACTIONS: Record<string, number> = {
   "¼": 0.25,
   "½": 0.5,
@@ -138,7 +152,12 @@ function parseLeadingQuantity(token: string): number | null {
 function stripLeadingUnitOnly(text: string): ParsedIngredientLine {
   const match = /^(\S+)\s+(.+)$/.exec(text);
   if (match && UNIT_WORD_SET.has(match[1].toLowerCase())) {
-    return { quantity: null, unit: match[1].toLowerCase(), name: match[2].trim(), rawText: text };
+    return {
+      quantity: null,
+      unit: normalizeUnit(match[1].toLowerCase()),
+      name: match[2].trim(),
+      rawText: text,
+    };
   }
   return { quantity: null, unit: null, name: text, rawText: text };
 }
@@ -163,12 +182,22 @@ export function parseIngredientLine(rawText: string): ParsedIngredientLine {
   // single-word check.
   const twoWordMatch = /^(\S+\s+\S+)\s+(.+)$/.exec(remainder);
   if (twoWordMatch && UNIT_WORD_SET.has(twoWordMatch[1].toLowerCase())) {
-    return { quantity, unit: twoWordMatch[1].toLowerCase(), name: twoWordMatch[2].trim(), rawText: trimmed };
+    return {
+      quantity,
+      unit: normalizeUnit(twoWordMatch[1].toLowerCase()),
+      name: twoWordMatch[2].trim(),
+      rawText: trimmed,
+    };
   }
 
   const oneWordMatch = /^(\S+)\s+(.+)$/.exec(remainder);
   if (oneWordMatch && UNIT_WORD_SET.has(oneWordMatch[1].toLowerCase())) {
-    return { quantity, unit: oneWordMatch[1].toLowerCase(), name: oneWordMatch[2].trim(), rawText: trimmed };
+    return {
+      quantity,
+      unit: normalizeUnit(oneWordMatch[1].toLowerCase()),
+      name: oneWordMatch[2].trim(),
+      rawText: trimmed,
+    };
   }
 
   return { quantity, unit: null, name: remainder.trim(), rawText: trimmed };

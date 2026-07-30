@@ -134,19 +134,24 @@ function hasKeyword(haystack: string, keyword: string): boolean {
   return new RegExp(`\\b${keyword}(e?s)?\\b`).test(haystack);
 }
 
-// A species word immediately followed by one of these means the word isn't
-// actually indicating that species' meat: "Chicken Stock Pot"/"Fish Stock
-// Cube"/"Beef Stock Powder" are near-universal seasoning pantry items used
-// in dishes of every protein (a splash of chicken stock in a pork dish
+// A species/cut word immediately followed by one of these means the word
+// isn't actually indicating that species' meat: "Chicken Stock Pot"/"Fish
+// Stock Cube"/"Beef Stock Powder" are near-universal seasoning pantry items
+// used in dishes of every protein (a splash of chicken stock in a pork dish
 // shouldn't count as a chicken signal, and a fish stock cube shouldn't
 // force the whole dish to FISH — confirmed against real data: "stock"
-// alone appears on 6,400+ ingredient lines across the catalog), and "cheese"
+// alone appears on 6,400+ ingredient lines across the catalog); "cheese"
 // catches dairy products named after an animal rather than its meat (e.g.
-// "Goat's Cheese Baguette" was wrongly classified MEAT_OTHER off "goat").
-const NON_PROTEIN_CONTEXT_SUFFIXES = ["stock", "bouillon", "gravy", "cheese"];
+// "Goat's Cheese Baguette" was wrongly classified MEAT_OTHER off "goat");
+// and "bun" catches "Burger Bun(s)" — a bread product, not a beef signal
+// (616 ingredient lines mention it, and it was wrongly classifying
+// vegetarian recipes like "Onion Bhaji Fritter Burger" as BEEF).
+const NON_PROTEIN_CONTEXT_SUFFIXES = ["stock", "bouillon", "gravy", "cheese", "bun"];
 
 function isNonProteinContextMention(n: string, keyword: string): boolean {
-  return new RegExp(`\\b${keyword}('s)?\\s+(${NON_PROTEIN_CONTEXT_SUFFIXES.join("|")})\\b`).test(n);
+  return new RegExp(
+    `\\b${keyword}('s)?\\s+(${NON_PROTEIN_CONTEXT_SUFFIXES.join("|")})(e?s)?\\b`,
+  ).test(n);
 }
 
 function matchesKeyword(n: string, keyword: string): boolean {
@@ -159,7 +164,7 @@ function classifyIngredientSpecies(n: string): MeatSpecies | null {
     if (keywords.some((k) => matchesKeyword(n, k))) return species;
   }
   for (const { keyword, species } of AMBIGUOUS_CUT_FALLBACKS) {
-    if (hasKeyword(n, keyword)) return species;
+    if (matchesKeyword(n, keyword)) return species;
   }
   return null;
 }

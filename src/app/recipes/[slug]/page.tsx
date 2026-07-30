@@ -89,16 +89,16 @@ export default async function RecipeDetailPage({
           {steps.length > 0 && (
             <div className="mt-8">
               <h2 className="text-lg font-semibold text-zinc-900">Instructions</h2>
-              <ol className="mt-3 space-y-5">
+              <ol className="mt-3 space-y-4">
                 {steps.map((step, i) => (
-                  <li key={i} className="flex gap-3">
+                  <li key={i} className="flex gap-3 rounded-2xl border border-zinc-200 p-4">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-medium text-white">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="whitespace-pre-line text-sm text-zinc-700">{step.text}</p>
                       {step.imageUrl && (
-                        <div className="relative mt-2 aspect-[4/3] w-full max-w-xs overflow-hidden rounded-xl bg-zinc-100">
+                        <div className="relative mt-3 aspect-[4/3] w-full max-w-xs overflow-hidden rounded-xl bg-zinc-100">
                           <Image
                             src={step.imageUrl}
                             alt={step.caption ?? `Step ${i + 1}`}
