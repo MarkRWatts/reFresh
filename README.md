@@ -4,6 +4,8 @@ A personal web app for browsing HelloFresh (UK) recipes as cards and planning a 
 
 Full phase-by-phase history, design rationale, and bugs found along the way: [`../reFresh-docs/project-plan.md`](../reFresh-docs/project-plan.md). This README is the practical "how to run and work on this project" reference.
 
+![Card browser with the filter bar, protein-type colour coding, and favourite/plan toggles](docs/screenshot.png)
+
 ## Contents
 
 - [Features](#features)
