@@ -6,6 +6,7 @@ import type { ProteinType } from "@/generated/prisma/client";
 import {
   CALORIE_PRESETS,
   COOK_TIME_PRESETS,
+  PROTEIN_COLORS,
   PROTEIN_TYPE_OPTIONS,
   SORT_OPTIONS,
   type RangePreset,
@@ -18,6 +19,17 @@ function pillClasses(active: boolean): string {
     active
       ? "border-zinc-900 bg-zinc-900 text-white"
       : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400",
+  ].join(" ");
+}
+
+// Protein filter pills use the same per-protein color as the card/detail
+// badges (PROTEIN_COLORS) instead of the generic black/white active state,
+// so a pill's color always identifies the same protein everywhere.
+function proteinPillClasses(value: ProteinType, active: boolean): string {
+  const colors = PROTEIN_COLORS[value];
+  return [
+    "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+    active ? colors.active : `${colors.badge} hover:opacity-75`,
   ].join(" ");
 }
 
@@ -102,7 +114,7 @@ export default function FilterBar({
               key={option.value}
               type="button"
               onClick={() => toggleProtein(option.value)}
-              className={pillClasses(filters.proteinTypes.includes(option.value))}
+              className={proteinPillClasses(option.value, filters.proteinTypes.includes(option.value))}
             >
               {option.label}
             </button>

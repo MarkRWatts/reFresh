@@ -10,7 +10,15 @@ datasource db {
 }
 
 enum ProteinType {
-  MEAT
+  CHICKEN
+  TURKEY
+  BEEF
+  LAMB
+  PORK
+  // Meat recipes that don't cleanly resolve to one of the five species
+  // above (duck, venison, rabbit, goat, etc.) — classifyProteinType's
+  // keyword heuristic, see proteinType.ts.
+  MEAT_OTHER
   FISH
   VEGETARIAN
   VEGAN

@@ -7,7 +7,17 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-const VALID_PROTEIN_TYPES: ProteinType[] = ["MEAT", "FISH", "VEGETARIAN", "VEGAN"];
+const VALID_PROTEIN_TYPES: ProteinType[] = [
+  "CHICKEN",
+  "TURKEY",
+  "BEEF",
+  "LAMB",
+  "PORK",
+  "MEAT_OTHER",
+  "FISH",
+  "VEGETARIAN",
+  "VEGAN",
+];
 const VALID_SORTS: SortOption[] = ["rating", "calories", "cookMinutes", "recent"];
 
 export interface ParsedFilters {

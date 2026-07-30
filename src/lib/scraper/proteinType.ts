@@ -1,4 +1,16 @@
-export type ProteinType = "MEAT" | "FISH" | "VEGETARIAN" | "VEGAN" | "UNKNOWN";
+export type ProteinType =
+  | "CHICKEN"
+  | "TURKEY"
+  | "BEEF"
+  | "LAMB"
+  | "PORK"
+  | "MEAT_OTHER"
+  | "FISH"
+  | "VEGETARIAN"
+  | "VEGAN"
+  | "UNKNOWN";
+
+type MeatSpecies = "CHICKEN" | "TURKEY" | "BEEF" | "LAMB" | "PORK" | "MEAT_OTHER";
 
 // Terms that mean "this ingredient is a meat/fish substitute", so their
 // presence should NOT trigger a meat/fish match (e.g. "meat-free mince").
@@ -16,29 +28,44 @@ const VEGETARIAN_OVERRIDE_TERMS = [
   "linda mccartney",
 ];
 
-const MEAT_KEYWORDS = [
-  "chicken",
-  "beef",
-  "pork",
-  "lamb",
-  "bacon",
-  "sausage",
-  "chorizo",
-  "turkey",
-  "duck",
-  "venison",
-  "mince",
-  "gammon",
-  "ham",
-  "meatball",
-  "steak",
-  "pancetta",
-  "prosciutto",
-  "salami",
-  "veal",
-  "rabbit",
-  "goat",
+// Words that identify a species on their own, wherever they appear.
+const SPECIES_KEYWORDS: Record<MeatSpecies, string[]> = {
+  CHICKEN: ["chicken", "poussin"],
+  TURKEY: ["turkey"],
+  BEEF: ["beef", "veal", "brisket", "sirloin", "oxtail", "ox cheek"],
+  LAMB: ["lamb", "mutton"],
+  PORK: [
+    "pork",
+    "bacon",
+    "gammon",
+    "ham",
+    "pancetta",
+    "prosciutto",
+    "chorizo",
+    "salami",
+    "pepperoni",
+    "nduja",
+  ],
+  MEAT_OTHER: ["duck", "venison", "rabbit", "goat", "quail", "pheasant", "wild boar"],
+};
+
+// Cut/prep words that say nothing about species by themselves ("mince",
+// "sausage") — only used if the ingredient string doesn't already match one
+// of the SPECIES_KEYWORDS above, falling back to whichever species that cut
+// is most commonly sold as on HelloFresh UK.
+const AMBIGUOUS_CUT_FALLBACKS: { keyword: string; species: MeatSpecies }[] = [
+  { keyword: "mince", species: "BEEF" },
+  { keyword: "steak", species: "BEEF" },
+  { keyword: "meatball", species: "BEEF" },
+  { keyword: "burger", species: "BEEF" },
+  { keyword: "sausage", species: "PORK" },
+  { keyword: "escalope", species: "CHICKEN" },
 ];
+
+// Tie-break order when an ingredient list matches more than one species
+// (whichever species has the most matching ingredient lines wins; ties go
+// to whichever comes first here).
+const SPECIES_PRIORITY: MeatSpecies[] = ["CHICKEN", "BEEF", "PORK", "LAMB", "TURKEY", "MEAT_OTHER"];
 
 // Includes every species in HelloFresh's own seafood-recipe collection
 // pages (Salmon, Cod, Hake, Prawn, Basa, Haddock, Crab, Coley, Sea Bream,
@@ -94,6 +121,34 @@ function hasKeyword(haystack: string, keyword: string): boolean {
   return new RegExp(`\\b${keyword}(e?s)?\\b`).test(haystack);
 }
 
+// A species word immediately followed by one of these is a seasoning base,
+// not the dish's actual protein (e.g. "Chicken Stock Pot", "Fish Stock
+// Cube", "Beef Stock Powder" are near-universal pantry items used in
+// dishes of every protein — a splash of chicken stock in a pork dish
+// shouldn't count as a chicken signal, and a fish stock cube shouldn't
+// force the whole dish to FISH). Confirmed against real data: "stock"
+// alone appears on 6,400+ ingredient lines across the catalog.
+const FLAVOR_CARRIER_SUFFIXES = ["stock", "bouillon", "gravy"];
+
+function isFlavorCarrierMention(n: string, keyword: string): boolean {
+  return new RegExp(`\\b${keyword}\\b\\s+(${FLAVOR_CARRIER_SUFFIXES.join("|")})\\b`).test(n);
+}
+
+function matchesKeyword(n: string, keyword: string): boolean {
+  return hasKeyword(n, keyword) && !isFlavorCarrierMention(n, keyword);
+}
+
+/** Which species (if any) a single ingredient line identifies. */
+function classifyIngredientSpecies(n: string): MeatSpecies | null {
+  for (const [species, keywords] of Object.entries(SPECIES_KEYWORDS) as [MeatSpecies, string[]][]) {
+    if (keywords.some((k) => matchesKeyword(n, k))) return species;
+  }
+  for (const { keyword, species } of AMBIGUOUS_CUT_FALLBACKS) {
+    if (hasKeyword(n, keyword)) return species;
+  }
+  return null;
+}
+
 export interface ProteinTypeInput {
   ingredientNames: string[];
   name?: string;
@@ -102,10 +157,13 @@ export interface ProteinTypeInput {
 }
 
 /**
- * Keyword heuristic classifying a recipe as MEAT/FISH/VEGETARIAN/VEGAN.
- * The JSON-LD HelloFresh publishes doesn't carry a dietary-type field
- * directly, so this infers it from ingredient text — expected to be
- * refined once real misclassifications are visible (see project plan).
+ * Keyword heuristic classifying a recipe's dominant protein. The JSON-LD
+ * HelloFresh publishes doesn't carry a dietary-type field directly, so this
+ * infers it from ingredient text — expected to be refined once real
+ * misclassifications are visible (see project plan). Fish takes priority
+ * over meat when both appear (matches the previous MEAT/FISH behavior);
+ * among meat species, whichever has the most matching ingredient lines
+ * wins, tie-broken by SPECIES_PRIORITY.
  */
 export function classifyProteinType(input: ProteinTypeInput): ProteinType {
   const metaText = [input.name, input.category, input.cuisine]
@@ -115,7 +173,7 @@ export function classifyProteinType(input: ProteinTypeInput): ProteinType {
 
   if (input.ingredientNames.length === 0) return "UNKNOWN";
 
-  let hasMeat = false;
+  const speciesCounts = new Map<MeatSpecies, number>();
   let hasFish = false;
   let hasVeganMarker = /\bvegan\b/.test(metaText);
 
@@ -123,12 +181,27 @@ export function classifyProteinType(input: ProteinTypeInput): ProteinType {
     const n = rawName.toLowerCase();
     if (/\bvegan\b/.test(n)) hasVeganMarker = true;
     if (VEGETARIAN_OVERRIDE_TERMS.some((term) => n.includes(term))) continue;
-    if (FISH_KEYWORDS.some((k) => hasKeyword(n, k))) hasFish = true;
-    if (MEAT_KEYWORDS.some((k) => hasKeyword(n, k))) hasMeat = true;
+    if (FISH_KEYWORDS.some((k) => matchesKeyword(n, k))) hasFish = true;
+
+    const species = classifyIngredientSpecies(n);
+    if (species) speciesCounts.set(species, (speciesCounts.get(species) ?? 0) + 1);
   }
 
   if (hasFish) return "FISH";
-  if (hasMeat) return "MEAT";
+
+  if (speciesCounts.size > 0) {
+    let best: MeatSpecies = SPECIES_PRIORITY[0];
+    let bestCount = -1;
+    for (const species of SPECIES_PRIORITY) {
+      const count = speciesCounts.get(species) ?? 0;
+      if (count > bestCount) {
+        bestCount = count;
+        best = species;
+      }
+    }
+    return best;
+  }
+
   if (hasVeganMarker) return "VEGAN";
   return "VEGETARIAN";
 }
