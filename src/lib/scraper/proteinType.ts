@@ -121,21 +121,23 @@ function hasKeyword(haystack: string, keyword: string): boolean {
   return new RegExp(`\\b${keyword}(e?s)?\\b`).test(haystack);
 }
 
-// A species word immediately followed by one of these is a seasoning base,
-// not the dish's actual protein (e.g. "Chicken Stock Pot", "Fish Stock
-// Cube", "Beef Stock Powder" are near-universal pantry items used in
-// dishes of every protein — a splash of chicken stock in a pork dish
+// A species word immediately followed by one of these means the word isn't
+// actually indicating that species' meat: "Chicken Stock Pot"/"Fish Stock
+// Cube"/"Beef Stock Powder" are near-universal seasoning pantry items used
+// in dishes of every protein (a splash of chicken stock in a pork dish
 // shouldn't count as a chicken signal, and a fish stock cube shouldn't
-// force the whole dish to FISH). Confirmed against real data: "stock"
-// alone appears on 6,400+ ingredient lines across the catalog.
-const FLAVOR_CARRIER_SUFFIXES = ["stock", "bouillon", "gravy"];
+// force the whole dish to FISH — confirmed against real data: "stock"
+// alone appears on 6,400+ ingredient lines across the catalog), and "cheese"
+// catches dairy products named after an animal rather than its meat (e.g.
+// "Goat's Cheese Baguette" was wrongly classified MEAT_OTHER off "goat").
+const NON_PROTEIN_CONTEXT_SUFFIXES = ["stock", "bouillon", "gravy", "cheese"];
 
-function isFlavorCarrierMention(n: string, keyword: string): boolean {
-  return new RegExp(`\\b${keyword}\\b\\s+(${FLAVOR_CARRIER_SUFFIXES.join("|")})\\b`).test(n);
+function isNonProteinContextMention(n: string, keyword: string): boolean {
+  return new RegExp(`\\b${keyword}('s)?\\s+(${NON_PROTEIN_CONTEXT_SUFFIXES.join("|")})\\b`).test(n);
 }
 
 function matchesKeyword(n: string, keyword: string): boolean {
-  return hasKeyword(n, keyword) && !isFlavorCarrierMention(n, keyword);
+  return hasKeyword(n, keyword) && !isNonProteinContextMention(n, keyword);
 }
 
 /** Which species (if any) a single ingredient line identifies. */
