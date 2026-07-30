@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { canonicalizeIngredientName } from "./ingredientNormalize";
+import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import type { ParsedRecipe } from "./parseRecipe";
 
 /**
@@ -17,10 +18,16 @@ import type { ParsedRecipe } from "./parseRecipe";
  * "Thai Green Style Chicken Curry") — and would have been wrongly hidden.
  * Still stored on the Recipe model as informational metadata, just not
  * used here.
+ *
+ * A missing/unusable image is also treated as a visibility signal, not
+ * just a display fallback: browsing hellofresh.co.uk directly, you never
+ * see a recipe tile without a photo, so a recipe lacking one is exactly
+ * the same kind of incomplete/non-real entry as one with no ingredients.
  */
 function computeIsBrowsable(parsed: ParsedRecipe): boolean {
   if (parsed.ingredients.length === 0) return false;
   if (parsed.steps.length <= 1) return false;
+  if (!hasUsableImage(parsed.imageUrl)) return false;
   return true;
 }
 

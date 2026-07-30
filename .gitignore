@@ -45,3 +45,6 @@ next-env.d.ts
 
 # scraper HTML cache + incremental-scrape manifest
 /.cache
+
+# DB snapshots (npm run db:snapshot / db:restore) — large binary dumps
+/db-backups
