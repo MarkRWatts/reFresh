@@ -103,6 +103,10 @@ To keep the catalog current, schedule `npm run scrape` (checks the sitemap for n
 docker compose -f /path/to/refresh/docker-compose.yml --env-file /path/to/refresh/.env.docker exec -T app npm run scrape
 ```
 
+### Production (TrueNAS VM)
+
+The app runs on a TrueNAS-hosted Ubuntu VM, behind a Caddy reverse proxy shared with other apps on the same box, with a real Let's Encrypt certificate (DNS-01 via acme-dns) — see [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup.
+
 ## npm scripts
 
 | Script | What it does |
