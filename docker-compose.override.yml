@@ -1,0 +1,12 @@
+# Auto-loaded by `docker compose` alongside docker-compose.yml whenever no
+# `-f` flags are given — i.e. the Mac's local/dev workflow. Publishes `app`
+# directly on the host, with no reverse proxy, matching how it's always run
+# here. The VM deployment runs with explicit `-f docker-compose.yml -f
+# docker-compose.prod.yml`, which skips this file entirely — a shared Caddy
+# instance fronts `app` there instead (see docker-compose.prod.yml and
+# jobAppTracker's DEPLOYMENT.md for the shared reverse-proxy setup), so its
+# port stays internal to the Docker network, unpublished on the host.
+services:
+  app:
+    ports:
+      - "3000:3000"
