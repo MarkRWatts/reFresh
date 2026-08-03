@@ -1,0 +1,22 @@
+# VM deployment overlay — used via:
+#   docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# `app` joins the shared `edge` Docker network (external, created once on the
+# VM) instead of publishing a host port directly — a single shared Caddy
+# instance there reverse-proxies to `app` by its `refresh` alias, and to any
+# other app on the same VM (e.g. jobAppTracker) by its own alias. See
+# jobAppTracker's DEPLOYMENT.md for the shared reverse-proxy setup. This app
+# needs no auth of its own, so unlike jobAppTracker there's nothing else to
+# add here. Deliberately not merged into the base docker-compose.yml, which
+# the Mac's local/dev setup also uses with no proxy at all (see
+# docker-compose.override.yml).
+services:
+  app:
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - refresh
+
+networks:
+  edge:
+    external: true
