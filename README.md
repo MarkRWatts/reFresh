@@ -132,6 +132,8 @@ scripts/
   detect-variants.ts        # near-duplicate clustering job
   db-snapshot.ts / db-restore.ts
   generate-favicon.ts
+public/
+  brand/refresh-icon.png    # icon master — header logo + apple-icon.png source
 src/
   app/                      # Next.js App Router routes
     page.tsx                 # card browser ("/")
