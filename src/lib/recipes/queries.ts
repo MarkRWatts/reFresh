@@ -83,18 +83,25 @@ export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
   return where;
 }
 
-function buildOrderBy(sort: SortOption | undefined): Prisma.RecipeOrderByWithRelationInput {
-  switch (sort) {
-    case "calories":
-      return { calories: "asc" };
-    case "cookMinutes":
-      return { cookMinutes: "asc" };
-    case "recent":
-      return { createdAt: "desc" };
-    case "rating":
-    default:
-      return { ratingValue: "desc" };
-  }
+// A secondary sort on the unique `id` breaks ties deterministically — without
+// it, rows with equal sort values (e.g. many recipes sharing a rating) have
+// no guaranteed order across separate skip/take queries, so the same recipe
+// can shuffle onto multiple pages as you paginate.
+function buildOrderBy(sort: SortOption | undefined): Prisma.RecipeOrderByWithRelationInput[] {
+  const primary: Prisma.RecipeOrderByWithRelationInput = (() => {
+    switch (sort) {
+      case "calories":
+        return { calories: "asc" };
+      case "cookMinutes":
+        return { cookMinutes: "asc" };
+      case "recent":
+        return { createdAt: "desc" };
+      case "rating":
+      default:
+        return { ratingValue: "desc" };
+    }
+  })();
+  return [primary, { id: "asc" }];
 }
 
 export interface RecipeListResult {

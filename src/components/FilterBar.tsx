@@ -58,6 +58,7 @@ export default function FilterBar({
   const router = useRouter();
   const pathname = usePathname();
   const [searchValue, setSearchValue] = useState(filters.search ?? "");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const isFirstRender = useRef(true);
 
   function navigate(next: Partial<ParsedFilters>) {
@@ -115,6 +116,14 @@ export default function FilterBar({
     filters.maxCookMinutes,
   );
 
+  const activeFilterCount =
+    (filters.favouritesOnly ? 1 : 0) +
+    filters.proteinTypes.length +
+    (filters.cuisine ? 1 : 0) +
+    (activeCaloriePreset !== "any" ? 1 : 0) +
+    (activeCookTimePreset !== "any" ? 1 : 0) +
+    (filters.showAll ? 1 : 0);
+
   return (
     <div className="sticky top-[57px] z-10 border-b border-zinc-200 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
@@ -124,88 +133,115 @@ export default function FilterBar({
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="Search recipes..."
-            className="w-full rounded-full border border-zinc-300 px-4 py-1.5 text-sm sm:w-56"
+            className="w-full rounded-full border border-zinc-300 px-4 py-1.5 text-base sm:w-56 sm:text-sm"
           />
 
           <button
             type="button"
-            onClick={toggleFavouritesOnly}
-            className={favouritesPillClasses(filters.favouritesOnly)}
+            onClick={() => setMobileFiltersOpen((open) => !open)}
+            className={`sm:hidden ${pillClasses(mobileFiltersOpen)}`}
+            aria-expanded={mobileFiltersOpen}
+            aria-controls="filter-bar-extras"
           >
-            <HeartIcon filled={filters.favouritesOnly} className="h-4 w-4" />
-            Favourites
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">
+                {activeFilterCount}
+              </span>
+            )}
+            <span className="ml-1">{mobileFiltersOpen ? "▲" : "▼"}</span>
           </button>
 
-          {PROTEIN_TYPE_OPTIONS.map((option) => (
+          {/*
+           * On mobile this is a collapsible panel below the search row so
+           * the filter pills don't push the recipe grid down by default;
+           * `sm:contents` drops the wrapper at the sm breakpoint so its
+           * children flow inline in the row exactly as before.
+           */}
+          <div
+            id="filter-bar-extras"
+            className={`${mobileFiltersOpen ? "flex" : "hidden"} w-full flex-wrap items-center gap-2 sm:contents`}
+          >
             <button
-              key={option.value}
               type="button"
-              onClick={() => toggleProtein(option.value)}
-              className={proteinPillClasses(option.value, filters.proteinTypes.includes(option.value))}
+              onClick={toggleFavouritesOnly}
+              className={favouritesPillClasses(filters.favouritesOnly)}
             >
-              {option.label}
+              <HeartIcon filled={filters.favouritesOnly} className="h-4 w-4" />
+              Favourites
             </button>
-          ))}
 
-          <select
-            value={filters.cuisine ?? ""}
-            onChange={(e) => navigate({ cuisine: e.target.value || undefined })}
-            className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
-          >
-            <option value="">All cuisines</option>
-            {cuisines.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <div className="flex items-center gap-1">
-            {CALORIE_PRESETS.map((preset) => (
+            {PROTEIN_TYPE_OPTIONS.map((option) => (
               <button
-                key={preset.key}
+                key={option.value}
                 type="button"
-                onClick={() => selectCaloriePreset(preset)}
-                className={pillClasses(activeCaloriePreset === preset.key)}
+                onClick={() => toggleProtein(option.value)}
+                className={proteinPillClasses(option.value, filters.proteinTypes.includes(option.value))}
               >
-                {preset.label}
+                {option.label}
               </button>
             ))}
+
+            <select
+              value={filters.cuisine ?? ""}
+              onChange={(e) => navigate({ cuisine: e.target.value || undefined })}
+              className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
+            >
+              <option value="">All cuisines</option>
+              {cuisines.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex items-center gap-1">
+              {CALORIE_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => selectCaloriePreset(preset)}
+                  className={pillClasses(activeCaloriePreset === preset.key)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1">
+              {COOK_TIME_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => selectCookTimePreset(preset)}
+                  className={pillClasses(activeCookTimePreset === preset.key)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleShowAll}
+              title="Also show near-duplicate recipes that are normally hidden behind their primary"
+              className={pillClasses(filters.showAll)}
+            >
+              Show all recipes
+            </button>
+
+            <select
+              value={filters.sort}
+              onChange={(e) => navigate({ sort: e.target.value as ParsedFilters["sort"] })}
+              className="sm:ml-auto rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  Sort: {option.label}
+                </option>
+              ))}
+            </select>
           </div>
-
-          <div className="flex items-center gap-1">
-            {COOK_TIME_PRESETS.map((preset) => (
-              <button
-                key={preset.key}
-                type="button"
-                onClick={() => selectCookTimePreset(preset)}
-                className={pillClasses(activeCookTimePreset === preset.key)}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleShowAll}
-            title="Also show near-duplicate recipes that are normally hidden behind their primary"
-            className={pillClasses(filters.showAll)}
-          >
-            Show all recipes
-          </button>
-
-          <select
-            value={filters.sort}
-            onChange={(e) => navigate({ sort: e.target.value as ParsedFilters["sort"] })}
-            className="ml-auto rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                Sort: {option.label}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
     </div>
