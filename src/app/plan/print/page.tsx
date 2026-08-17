@@ -1,11 +1,28 @@
 import BackLink from "@/components/BackLink";
+import CopyListButton from "@/components/CopyListButton";
 import PrintButton from "@/components/PrintButton";
 import { getCurrentPlanRecipes } from "@/lib/mealplan/queries";
-import { computeSharedIngredients } from "@/lib/recipes/sharedIngredients";
+import { computeSharedIngredients, type IngredientGroup } from "@/lib/recipes/sharedIngredients";
 
 function formatQuantity(unit: string | null, totalQuantity: number): string {
   const rounded = Math.round(totalQuantity * 100) / 100;
   return unit ? `${rounded} ${unit}` : `${rounded}`;
+}
+
+function formatQuantityLabel(group: IngredientGroup): string {
+  return group.quantitiesByUnit.length > 0
+    ? group.quantitiesByUnit.map((q) => formatQuantity(q.unit, q.totalQuantity)).join(" + ")
+    : `x${group.entries.length}`;
+}
+
+function capitalize(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function buildPlainTextList(ingredientGroups: IngredientGroup[]): string {
+  return ingredientGroups
+    .map((group) => `${capitalize(group.canonicalName)} - ${formatQuantityLabel(group)}`)
+    .join("\n");
 }
 
 export default async function PlanPrintPage() {
@@ -22,7 +39,12 @@ export default async function PlanPrintPage() {
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-6 print:px-0 print:py-0">
       <div className="flex items-center justify-between print:hidden">
         <BackLink className="text-sm text-zinc-500 hover:text-zinc-700" />
-        <PrintButton label="Print shopping list" />
+        <div className="flex items-center gap-2">
+          {ingredientGroups.length > 0 && (
+            <CopyListButton text={buildPlainTextList(ingredientGroups)} />
+          )}
+          <PrintButton label="Print shopping list" />
+        </div>
       </div>
 
       <h1 className="mt-4 text-2xl font-semibold text-zinc-900 print:mt-0">Shopping list</h1>
@@ -66,13 +88,7 @@ export default async function PlanPrintPage() {
                   />
                   <span className="capitalize text-zinc-900">{group.canonicalName}</span>
                 </span>
-                <span className="shrink-0 text-zinc-500">
-                  {group.quantitiesByUnit.length > 0
-                    ? group.quantitiesByUnit
-                        .map((q) => formatQuantity(q.unit, q.totalQuantity))
-                        .join(" + ")
-                    : `x${group.entries.length}`}
-                </span>
+                <span className="shrink-0 text-zinc-500">{formatQuantityLabel(group)}</span>
               </li>
             ))}
           </ul>
