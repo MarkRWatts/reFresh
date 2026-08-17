@@ -119,7 +119,7 @@ The app runs on a TrueNAS-hosted Ubuntu VM, behind a Caddy reverse proxy shared 
 | `npm run detect-variants` | Re-cluster near-duplicate recipes across the whole browsable catalog |
 | `npm run db:snapshot` | `pg_dump` the database to `db-backups/refresh.dump` |
 | `npm run db:restore` | Restore `db-backups/refresh.dump` into the configured database (must already exist, e.g. via `createdb`) |
-| `npm run generate-favicon` | Regenerate `src/app/icon.svg` + `src/app/favicon.ico` from the single source SVG in `src/lib/brand/logo.ts` |
+| `npm run generate-favicon` | Regenerate `src/app/favicon.ico` + `src/app/apple-icon.png` from the icon sources in `src/lib/brand/` and `public/brand/refresh-icon.png` |
 
 ## Project structure
 
@@ -146,7 +146,7 @@ src/
                               #   variant detection, custom-recipe clone/edit actions
     mealplan/                 # the (single, implicit) weekly plan: queries, actions, auto-suggest
     favourites/                # favourite toggle action
-    brand/                     # logo SVG source
+    brand/                     # 16/32/48px icon sources for favicon.ico
   generated/prisma/           # Prisma client output (gitignored, regenerated via `prisma generate`)
 ```
 

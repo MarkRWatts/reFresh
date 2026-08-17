@@ -1,14 +1,21 @@
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { LOGO_SVG_BODY, LOGO_VIEW_BOX } from "../src/lib/brand/logo";
 
 const APP_DIR = path.join(process.cwd(), "src", "app");
-const ICON_SIZES = [16, 32, 48];
+const BRAND_DIR = path.join(process.cwd(), "src", "lib", "brand");
+const MASTER = path.join(process.cwd(), "public", "brand", "refresh-icon.png");
 
-function standaloneSvg(): string {
-  return `<svg viewBox="${LOGO_VIEW_BOX}" xmlns="http://www.w3.org/2000/svg">\n${LOGO_SVG_BODY}\n</svg>\n`;
-}
+// Pre-cut 16/32/48px renditions of the icon, kept as separate source files
+// (rather than resized from the master here) because they carry their own
+// hand-tuned transparency around the rounded-square mark — resizing the
+// opaque master would fill their corners in solid instead of cutting them
+// out.
+const ICO_SOURCES = [
+  { size: 16, file: "icon-16.png" },
+  { size: 32, file: "icon-32.png" },
+  { size: 48, file: "icon-48.png" },
+];
 
 /**
  * Packs PNG buffers into a multi-resolution .ico container (ICONDIR +
@@ -51,21 +58,19 @@ function packIco(pngs: { size: number; data: Buffer }[]): Buffer {
 }
 
 async function main() {
-  const svg = standaloneSvg();
+  const pngs = ICO_SOURCES.map(({ size, file }) => ({
+    size,
+    data: readFileSync(path.join(BRAND_DIR, file)),
+  }));
+  writeFileSync(path.join(APP_DIR, "favicon.ico"), packIco(pngs));
+  console.log(`Wrote src/app/favicon.ico (${ICO_SOURCES.map((s) => s.size).join("/")}px).`);
 
-  writeFileSync(path.join(APP_DIR, "icon.svg"), svg);
-  console.log("Wrote src/app/icon.svg (modern SVG favicon).");
-
-  const pngs = await Promise.all(
-    ICON_SIZES.map(async (size) => ({
-      size,
-      data: await sharp(Buffer.from(svg)).resize(size, size).png().toBuffer(),
-    })),
-  );
-
-  const ico = packIco(pngs);
-  writeFileSync(path.join(APP_DIR, "favicon.ico"), ico);
-  console.log(`Wrote src/app/favicon.ico (${ICON_SIZES.join("/")}px).`);
+  // Apple's touch-icon convention wants an opaque square (iOS applies its
+  // own corner rounding/shadow) — the master has no alpha channel, so it's
+  // used directly here rather than one of the transparent small cuts.
+  const appleIcon = await sharp(MASTER).resize(180, 180).png().toBuffer();
+  writeFileSync(path.join(APP_DIR, "apple-icon.png"), appleIcon);
+  console.log("Wrote src/app/apple-icon.png (180px, from the master).");
 }
 
 main();
