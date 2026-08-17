@@ -8,6 +8,7 @@ const INVARIANT_WORDS_ENDING_IN_S = new Set([
   "asparagus",
   "molasses",
   "brussels",
+  "manis",
 ]);
 
 function stripTrailingPlural(n: string): string {
