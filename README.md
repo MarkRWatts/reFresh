@@ -4,7 +4,8 @@ A personal web app for browsing HelloFresh (UK) recipes as cards and planning a 
 
 Full phase-by-phase history, design rationale, and bugs found along the way: [`../reFresh-docs/project-plan.md`](../reFresh-docs/project-plan.md). This README is the practical "how to run and work on this project" reference.
 
-![Card browser with the filter bar, protein-type colour coding, and favourite/plan toggles](docs/screenshot.png)
+| ![Card browser with the filter bar, protein-type colour coding, and favourite/plan toggles](docs/screenshot-browse.png) | ![The "This week" plan drawer, showing shared ingredients across recipes and a shopping list preview](docs/screenshot-plan.png) | ![Full shopping list page, summed across the week's recipes](docs/screenshot-shopping-list.png) |
+|---|---|---|
 
 > **About the data.** This is a personal, non-commercial project for my own meal planning. The scraper only fetches pages `hellofresh.co.uk/robots.txt` explicitly permits crawling, reading the same public sitemap and per-page structured data (`schema.org/Recipe` JSON-LD) any search engine would. No scraped content, database dump, or cache is included in this repository — `.cache/` and `db-backups/` are gitignored — and nothing here is redistributed publicly; the app itself only ever runs locally. If you're from HelloFresh and have a concern about this, please open an issue.
 
