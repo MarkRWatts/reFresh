@@ -41,12 +41,10 @@ export default function RootLayout({
               <Logo className="h-6 w-6" />
               re<span className="text-emerald-600">:</span>Fresh
             </Link>
+            <PlanDrawerRoot />
           </div>
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
-        <div className="print:hidden">
-          <PlanDrawerRoot />
-        </div>
       </body>
     </html>
   );
