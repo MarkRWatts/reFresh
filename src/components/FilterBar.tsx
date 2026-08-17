@@ -125,7 +125,7 @@ export default function FilterBar({
     (filters.showAll ? 1 : 0);
 
   return (
-    <div className="sticky top-[57px] z-10 border-b border-zinc-200 bg-white/95 backdrop-blur">
+    <div className="sticky top-[61px] z-10 border-b border-zinc-200 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <input

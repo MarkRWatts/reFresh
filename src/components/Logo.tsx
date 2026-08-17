@@ -1,14 +1,15 @@
-import { LOGO_SVG_BODY, LOGO_VIEW_BOX } from "@/lib/brand/logo";
+import Image from "next/image";
 
-export default function Logo({ className = "h-6 w-6" }: { className?: string }) {
+/** The icon mark already bakes in the "re:Fresh" wordmark, so no adjacent text is needed alongside it. */
+export default function Logo({ className = "h-9 w-9" }: { className?: string }) {
   return (
-    <svg
-      viewBox={LOGO_VIEW_BOX}
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      // LOGO_SVG_BODY is a hardcoded design constant, not user input.
-      dangerouslySetInnerHTML={{ __html: LOGO_SVG_BODY }}
+    <Image
+      src="/brand/refresh-icon.png"
+      alt="re:Fresh"
+      width={144}
+      height={144}
+      className={`${className} rounded-lg object-cover`}
+      priority
     />
   );
 }
