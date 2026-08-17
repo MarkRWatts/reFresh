@@ -55,7 +55,10 @@ export default function RecipeCard({
         </div>
 
         <div className="mt-auto flex flex-wrap gap-1.5">
-          {recipe.isUserCreated && (
+          {recipe.isPdfImport && (
+            <Badge className="border-sky-200 bg-sky-50 text-sky-700">📄 Imported</Badge>
+          )}
+          {recipe.isUserCreated && !recipe.isPdfImport && (
             <Badge className="border-violet-200 bg-violet-50 text-violet-700">My recipe</Badge>
           )}
           <Badge className={PROTEIN_BADGE_STYLES[recipe.proteinType]}>

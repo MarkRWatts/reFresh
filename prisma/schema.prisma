@@ -46,7 +46,10 @@ model Recipe {
   subtitle       String? // the "with ..." part of a HelloFresh recipe title
   description    String?
   imageUrl       String?
-  sourceUrl      String
+  // Null for a recipe imported from a scanned PDF card — there's no page it
+  // came from. Always populated for scraped recipes, and inherited as
+  // provenance (not a real source) by clones — see isUserCreated below.
+  sourceUrl      String?
   cookMinutes    Int?
   servings       Int?
   calories       Int?
@@ -112,6 +115,11 @@ model Recipe {
   // from. `npm run reprocess` never touches these rows — it only ever
   // upserts by hfId against cached scraped HTML.
   isUserCreated  Boolean     @default(false)
+  // True for a recipe created by parsing a scanned HelloFresh card PDF
+  // (see src/lib/pdfImport). A more specific provenance tag than
+  // isUserCreated, which is also true for these rows so they pick up the
+  // same "editable" treatment as clones (ingredient editor, etc.).
+  isPdfImport    Boolean     @default(false)
   // The recipe this one was cloned from, if any. Deliberately a separate
   // field from variantOfId: that one is catalog-clustering machinery that
   // scripts/detect-variants.ts resets and recomputes wholesale on every
@@ -190,4 +198,20 @@ model MealPlanRecipe {
   recipe   Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@unique([mealPlanId, recipeId])
+}
+
+// A PDF card that's been parsed (see src/lib/pdfImport) but not yet
+// reviewed and committed into a real Recipe. OCR extraction is imperfect
+// by design (see parseCardPdf.ts) — this is the staging area the review
+// screen edits before a human confirms it. Its cover/step images live on
+// disk under RECIPE_IMAGES_DIR/_drafts/<id>/ (see imageStorage.ts), not in
+// this row, since Json isn't a sane place for binary blobs.
+model PdfImportDraft {
+  id               String   @id @default(cuid())
+  originalFilename String
+  templateId       String
+  // DraftRecipeData (see parseCardPdf.ts) — a ParsedCardRecipe with its
+  // image Buffers stripped out.
+  data             Json
+  createdAt        DateTime @default(now())
 }

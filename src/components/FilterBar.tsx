@@ -43,6 +43,15 @@ function favouritesPillClasses(active: boolean): string {
   ].join(" ");
 }
 
+function importedPillClasses(active: boolean): string {
+  return [
+    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+    active
+      ? "border-sky-500 bg-sky-50 text-sky-700"
+      : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400",
+  ].join(" ");
+}
+
 function activeRangePreset(presets: RangePreset[], min?: number, max?: number): string {
   const match = presets.find((p) => p.min === min && p.max === max);
   return match?.key ?? "any";
@@ -76,6 +85,10 @@ export default function FilterBar({
 
   function toggleFavouritesOnly() {
     navigate({ favouritesOnly: !filters.favouritesOnly });
+  }
+
+  function toggleImportedOnly() {
+    navigate({ importedOnly: !filters.importedOnly });
   }
 
   function toggleShowAll() {
@@ -118,6 +131,7 @@ export default function FilterBar({
 
   const activeFilterCount =
     (filters.favouritesOnly ? 1 : 0) +
+    (filters.importedOnly ? 1 : 0) +
     filters.proteinTypes.length +
     (filters.cuisine ? 1 : 0) +
     (activeCaloriePreset !== "any" ? 1 : 0) +
@@ -169,6 +183,14 @@ export default function FilterBar({
             >
               <HeartIcon filled={filters.favouritesOnly} className="h-4 w-4" />
               Favourites
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleImportedOnly}
+              className={importedPillClasses(filters.importedOnly)}
+            >
+              📄 Imported
             </button>
 
             {PROTEIN_TYPE_OPTIONS.map((option) => (

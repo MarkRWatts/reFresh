@@ -1,0 +1,113 @@
+import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+import type { ParsedCardRecipe } from "./parseCardPdf";
+
+// Not under public/ — that directory is baked into the Docker image at
+// build time (see Dockerfile), not a volume, so anything written there at
+// runtime would vanish on the next deploy. This directory is its own named
+// volume instead (see docker-compose.yml) and served via the route handler
+// at src/app/api/recipe-images/[...path]/route.ts.
+const RECIPE_IMAGES_DIR = process.env.RECIPE_IMAGES_DIR ?? "./storage/recipe-images";
+
+function draftDir(draftId: string): string {
+  return path.join(RECIPE_IMAGES_DIR, "_drafts", draftId);
+}
+
+function recipeDir(recipeId: string): string {
+  return path.join(RECIPE_IMAGES_DIR, recipeId);
+}
+
+function stepFilename(index: number): string {
+  return `step-${index + 1}.png`;
+}
+
+const STEP_FILENAME_PATTERN = /^step-(\d+)\.png$/;
+
+/** The same-origin URL the recipe-images route handler serves this file at, suitable for storing directly in Recipe.imageUrl / a step's imageUrl. */
+export function recipeImageUrl(recipeId: string, filename: string): string {
+  return `/api/recipe-images/${recipeId}/${filename}`;
+}
+
+function draftImageUrl(draftId: string, filename: string): string {
+  return `/api/recipe-images/_drafts/${draftId}/${filename}`;
+}
+
+/**
+ * Reconstructs a draft's image URLs from its id + step count — the review
+ * page's route param is all it's given, and the draft's stored JSON has no
+ * photo data (see toDraftRecipeData), so this checks disk directly for
+ * which steps actually got a photo file. Not every step has one — some
+ * legacy card layouts only photograph a handful of steps, or (for a
+ * "flowing" step layout) don't get photo-matched at all — so this returns
+ * null for whichever indices are missing rather than assuming a contiguous
+ * step-1..N run.
+ */
+export async function draftImageUrls(
+  draftId: string,
+  stepCount: number,
+): Promise<{ coverImageUrl: string; stepImageUrls: (string | null)[] }> {
+  const dir = draftDir(draftId);
+  const stepImageUrls: (string | null)[] = [];
+  for (let i = 0; i < stepCount; i++) {
+    const exists = await stat(path.join(dir, stepFilename(i))).then(
+      () => true,
+      () => false,
+    );
+    stepImageUrls.push(exists ? draftImageUrl(draftId, stepFilename(i)) : null);
+  }
+  return { coverImageUrl: draftImageUrl(draftId, "cover.png"), stepImageUrls };
+}
+
+/** Writes a freshly-parsed card's cover + step photos to a per-draft staging folder. Steps with no photo (see ParsedCardStep.photo) simply get no file written for them. */
+export async function saveDraftImages(
+  draftId: string,
+  parsed: Pick<ParsedCardRecipe, "coverPhoto" | "steps">,
+): Promise<void> {
+  const dir = draftDir(draftId);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, "cover.png"), parsed.coverPhoto);
+  await Promise.all(
+    parsed.steps.map((step, i) =>
+      step.photo ? writeFile(path.join(dir, stepFilename(i)), step.photo) : Promise.resolve(),
+    ),
+  );
+}
+
+/** Moves a draft's staged images to their permanent per-recipe location once the draft is committed, returning URLs indexed by step position (null wherever that step never had a photo file). */
+export async function promoteDraftImages(
+  draftId: string,
+  recipeId: string,
+): Promise<{ coverImageUrl: string; stepImageUrls: (string | null)[] }> {
+  const from = draftDir(draftId);
+  const to = recipeDir(recipeId);
+  await mkdir(path.dirname(to), { recursive: true });
+  await rename(from, to);
+
+  const files = await readdir(to);
+  const stepIndices = files
+    .map((f) => STEP_FILENAME_PATTERN.exec(f))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => Number(m[1]) - 1);
+  const maxIndex = stepIndices.length > 0 ? Math.max(...stepIndices) : -1;
+  const present = new Set(stepIndices);
+
+  const stepImageUrls: (string | null)[] = [];
+  for (let i = 0; i <= maxIndex; i++) {
+    stepImageUrls.push(present.has(i) ? recipeImageUrl(recipeId, stepFilename(i)) : null);
+  }
+  return { coverImageUrl: recipeImageUrl(recipeId, "cover.png"), stepImageUrls };
+}
+
+/** Deletes a draft's staged images — called when a draft is discarded rather than committed. */
+export async function deleteDraftImages(draftId: string): Promise<void> {
+  await rm(draftDir(draftId), { recursive: true, force: true });
+}
+
+/** Resolves a URL path (as served by the route handler, e.g. "_drafts/<id>/cover.png") to its file on disk, rejecting anything that would escape RECIPE_IMAGES_DIR. */
+export function resolveRecipeImagePath(segments: string[]): string | null {
+  if (segments.some((s) => s.includes("..") || s.includes("/") || s.includes("\\"))) return null;
+  const resolved = path.join(RECIPE_IMAGES_DIR, ...segments);
+  const root = path.resolve(RECIPE_IMAGES_DIR);
+  if (!path.resolve(resolved).startsWith(root + path.sep)) return null;
+  return resolved;
+}

@@ -35,12 +35,20 @@ export default async function Home({
           <p className="text-sm text-zinc-500">
             {total.toLocaleString()} recipe{total === 1 ? "" : "s"}
           </p>
-          <Link
-            href={`/suggest${buildFilterQueryString(filters)}`}
-            className="rounded-full border border-emerald-600 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-          >
-            ✨ Suggest a week
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/recipes/import"
+              className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 hover:border-zinc-400"
+            >
+              📄 Import from PDF
+            </Link>
+            <Link
+              href={`/suggest${buildFilterQueryString(filters)}`}
+              className="rounded-full border border-emerald-600 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+            >
+              ✨ Suggest a week
+            </Link>
+          </div>
         </div>
 
         {recipes.length === 0 ? (

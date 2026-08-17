@@ -31,6 +31,7 @@ export interface ParsedFilters {
   maxCookMinutes?: number;
   search?: string;
   favouritesOnly: boolean;
+  importedOnly: boolean;
   showAll: boolean;
   sort: SortOption;
   page: number;
@@ -63,6 +64,7 @@ export function parseFilters(raw: RawSearchParams): ParsedFilters {
     maxCookMinutes: toInt(first(raw.maxTime)),
     search: first(raw.q) || undefined,
     favouritesOnly: first(raw.fav) === "1",
+    importedOnly: first(raw.imported) === "1",
     showAll: first(raw.all) === "1",
     sort,
     page,
@@ -79,6 +81,7 @@ export function toListParams(filters: ParsedFilters, pageSize: number): RecipeLi
     maxCookMinutes: filters.maxCookMinutes,
     search: filters.search,
     favouritesOnly: filters.favouritesOnly,
+    importedOnly: filters.importedOnly,
     showAll: filters.showAll,
     sort: filters.sort,
     page: filters.page,
@@ -101,6 +104,7 @@ export function buildFilterQueryString(
   if (filters.maxCookMinutes != null) params.set("maxTime", String(filters.maxCookMinutes));
   if (filters.search) params.set("q", filters.search);
   if (filters.favouritesOnly) params.set("fav", "1");
+  if (filters.importedOnly) params.set("imported", "1");
   if (filters.showAll) params.set("all", "1");
   if (filters.sort && filters.sort !== "rating") params.set("sort", filters.sort);
   if (filters.page && filters.page > 1) params.set("page", String(filters.page));
