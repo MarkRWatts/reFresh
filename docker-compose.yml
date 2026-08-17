@@ -22,14 +22,22 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-refresh}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-refresh}?schema=public
+      RECIPE_IMAGES_DIR: /app/storage/recipe-images
     volumes:
       # Scraper's HTML cache — keeps re-scrapes/reprocesses from re-downloading
-      # every recipe page. Safe to delete if you want a clean slate.
+      # every recipe page. Also where the PDF-import OCR engine's language
+      # model gets cached after its first download (see src/lib/pdfImport/ocr.ts)
+      # — safe to delete if you want a clean slate, it'll just refetch.
       - scraper-cache:/app/.cache
       # Output of `npm run db:snapshot`.
       - db-backups:/app/db-backups
+      # Cover/step photos cropped out of imported PDF cards (see
+      # src/lib/pdfImport/imageStorage.ts) — not under public/, since that's
+      # baked into the image at build time and wouldn't survive a redeploy.
+      - recipe-images:/app/storage/recipe-images
 
 volumes:
   pgdata:
   scraper-cache:
   db-backups:
+  recipe-images:

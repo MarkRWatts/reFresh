@@ -62,7 +62,10 @@ export default async function RecipeDetailPage({
           {recipe.subtitle && <p className="mt-1 text-zinc-500">{recipe.subtitle}</p>}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {recipe.isUserCreated && (
+            {recipe.isPdfImport && (
+              <Badge className="border-sky-200 bg-sky-50 text-sky-700">📄 From a card scan</Badge>
+            )}
+            {recipe.isUserCreated && !recipe.isPdfImport && (
               <Badge className="border-violet-200 bg-violet-50 text-violet-700">My recipe</Badge>
             )}
             <Badge className={PROTEIN_BADGE_STYLES[recipe.proteinType]}>
@@ -119,14 +122,16 @@ export default async function RecipeDetailPage({
 
           {recipe.description && <p className="mt-4 text-zinc-600">{recipe.description}</p>}
 
-          <a
-            href={recipe.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800 hover:underline print:hidden"
-          >
-            View original recipe on HelloFresh ↗
-          </a>
+          {recipe.sourceUrl && (
+            <a
+              href={recipe.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800 hover:underline print:hidden"
+            >
+              View original recipe on HelloFresh ↗
+            </a>
+          )}
 
           {steps.length > 0 && (
             <div className="mt-8">

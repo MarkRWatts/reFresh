@@ -6,22 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveIngredientId } from "./ingredientResolution";
 import { classifyProteinType } from "@/lib/scraper/proteinType";
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-async function uniqueSlug(base: string): Promise<string> {
-  let slug = base;
-  let suffix = 2;
-  while (await prisma.recipe.findUnique({ where: { slug }, select: { id: true } })) {
-    slug = `${base}-${suffix++}`;
-  }
-  return slug;
-}
+import { slugify, uniqueSlug } from "./slug";
 
 /**
  * Duplicates a recipe (and its ingredients) into a new editable copy, then
