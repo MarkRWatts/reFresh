@@ -91,6 +91,10 @@ export default function FilterBar({
     navigate({ importedOnly: !filters.importedOnly });
   }
 
+  function toggleHiddenOnly() {
+    navigate({ hiddenOnly: !filters.hiddenOnly });
+  }
+
   function toggleShowAll() {
     navigate({ showAll: !filters.showAll });
   }
@@ -132,6 +136,7 @@ export default function FilterBar({
   const activeFilterCount =
     (filters.favouritesOnly ? 1 : 0) +
     (filters.importedOnly ? 1 : 0) +
+    (filters.hiddenOnly ? 1 : 0) +
     filters.proteinTypes.length +
     (filters.cuisine ? 1 : 0) +
     (activeCaloriePreset !== "any" ? 1 : 0) +
@@ -191,6 +196,15 @@ export default function FilterBar({
               className={importedPillClasses(filters.importedOnly)}
             >
               📄 Imported
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleHiddenOnly}
+              title="Recipes you've hidden — the only place to find and unhide one"
+              className={pillClasses(filters.hiddenOnly)}
+            >
+              🙈 Hidden
             </button>
 
             {PROTEIN_TYPE_OPTIONS.map((option) => (

@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
+import BackLink from "@/components/BackLink";
+import SubmitButton from "@/components/SubmitButton";
+import DeleteRecipeButton from "@/components/DeleteRecipeButton";
+import { TextField, NutritionFieldsSection, StepsFieldsSection } from "@/components/RecipeEditorFields";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
-import { addCustomIngredient, removeCustomIngredient } from "@/lib/recipes/customRecipeActions";
+import { updateRecipeFields } from "@/lib/recipes/recipeEditActions";
+import { parseRecipeSteps } from "@/lib/recipes/steps";
 
 export default async function EditRecipePage({
   params,
@@ -13,100 +18,75 @@ export default async function EditRecipePage({
   if (!recipe) notFound();
   if (!recipe.isUserCreated) redirect(`/recipes/${slug}`);
 
+  const recipeSteps = parseRecipeSteps(recipe.steps);
+  const steps = recipeSteps.map((s) => ({ heading: null, text: s.text }));
+  const stepImageUrls = recipeSteps.map((s) => s.imageUrl);
+
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-6">
-      <Link href={`/recipes/${slug}`} className="text-sm text-zinc-500 hover:text-zinc-700">
-        ← Back to {recipe.name}
-      </Link>
+      <BackLink className="text-sm text-zinc-500 hover:text-zinc-700" />
 
-      <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Editing ingredients</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Editing {recipe.name}</h1>
       <p className="mt-1 text-sm text-zinc-500">
-        Add or remove ingredients below. Everything else (steps, photo, nutrition) stays as
-        cloned from the original recipe.
+        Change anything below, then save. Ingredient rows: clear a name to drop it, or fill in the
+        blank row at the bottom to add one. Steps: clear a step&rsquo;s instructions to drop it.
       </p>
 
-      <div className="mt-6 rounded-2xl border border-zinc-200 p-4">
-        <h2 className="text-sm font-semibold text-zinc-900">Ingredients</h2>
-        <ul className="mt-2 space-y-1.5">
-          {recipe.ingredients.map((ri) => (
-            <li
-              key={ri.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700"
-            >
-              <span>
-                {ri.quantity != null && <span className="text-zinc-400">{ri.quantity} </span>}
-                {ri.unit && <span className="text-zinc-400">{ri.unit} </span>}
-                {ri.ingredient.canonicalName}
-              </span>
-              <form action={removeCustomIngredient.bind(null, ri.id)}>
-                <button
-                  type="submit"
-                  className="shrink-0 text-xs font-medium text-zinc-400 hover:text-red-600"
-                >
-                  Remove
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
+      <form action={updateRecipeFields.bind(null, recipe.id)} className="mt-6 space-y-6">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField label="Name" name="name" defaultValue={recipe.name} />
+          <TextField label="Subtitle" name="subtitle" defaultValue={recipe.subtitle ?? ""} />
+          <TextField label="Cook minutes" name="cookMinutes" type="number" defaultValue={recipe.cookMinutes ?? ""} />
+        </div>
 
-        <form
-          action={addCustomIngredient.bind(null, recipe.id)}
-          className="mt-4 flex flex-wrap items-end gap-2 border-t border-zinc-200 pt-4"
-        >
-          <div className="flex flex-col">
-            <label className="text-xs text-zinc-500" htmlFor="quantity">
-              Quantity
-            </label>
-            <input
-              id="quantity"
-              name="quantity"
-              type="text"
-              inputMode="decimal"
-              placeholder="1"
-              className="w-20 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-            />
+        <div className="rounded-2xl border border-zinc-200 p-4">
+          <h2 className="text-sm font-semibold text-zinc-900">Ingredients ({recipe.ingredients.length})</h2>
+          <div className="mt-3 space-y-2">
+            {[...recipe.ingredients, null].map((ri, i) => (
+              <div
+                key={ri?.id ?? "new"}
+                className="flex flex-wrap items-end gap-2 border-t border-zinc-100 pt-2 first:border-t-0 first:pt-0"
+              >
+                <div className="w-20">
+                  <TextField label="Qty" name="ingredientQuantity" defaultValue={ri?.quantity ?? ""} />
+                </div>
+                <div className="w-24">
+                  <TextField label="Unit" name="ingredientUnit" defaultValue={ri?.unit ?? ""} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <TextField
+                    label={i === recipe.ingredients.length ? "New ingredient" : "Name"}
+                    name="ingredientName"
+                    defaultValue={ri?.ingredient.canonicalName ?? ""}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex flex-col">
-            <label className="text-xs text-zinc-500" htmlFor="unit">
-              Unit
-            </label>
-            <input
-              id="unit"
-              name="unit"
-              type="text"
-              placeholder="grams"
-              className="w-24 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <label className="text-xs text-zinc-500" htmlFor="name">
-              Ingredient
-            </label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              required
-              placeholder="Garlic Clove"
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-full border border-emerald-600 bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+        </div>
+
+        <NutritionFieldsSection nutrition={recipe} />
+
+        <StepsFieldsSection steps={steps} stepImageUrls={stepImageUrls} showHeading={false} />
+
+        <div className="flex items-center gap-3">
+          <SubmitButton
+            label="Save changes"
+            pendingLabel="Saving…"
+            className="inline-flex items-center rounded-full border border-emerald-600 bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-emerald-300 disabled:bg-emerald-300"
+          />
+          <Link
+            href={`/recipes/${slug}`}
+            className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
           >
-            + Add
-          </button>
-        </form>
-      </div>
+            Cancel
+          </Link>
+        </div>
+      </form>
 
-      <Link
-        href={`/recipes/${slug}`}
-        className="mt-6 inline-block rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
-      >
-        Done editing
-      </Link>
+      <div className="mt-6 border-t border-zinc-200 pt-4">
+        <DeleteRecipeButton recipeId={recipe.id} recipeName={recipe.name} />
+      </div>
     </main>
   );
 }

@@ -91,13 +91,25 @@ function growFromSeed(
   return chosen;
 }
 
-/** Picks up to `seedCount` seeds, favoring higher-quality recipes but sampling the rest of the pool too for variety between suggested combinations. */
+/**
+ * Picks up to `seedCount` seeds, favoring higher-quality recipes but
+ * sampling the rest of the pool too for variety between suggested
+ * combinations.
+ *
+ * The top half used to be the literal top N by quality — fully
+ * deterministic, so reloading /suggest (or the persisted-suggestion-history
+ * exclusion in queries.ts not applying yet, e.g. a first-ever visit) kept
+ * regrowing the same combinations from the same handful of top-rated
+ * recipes. Sampling that half randomly from a wider top slice (instead of
+ * always the literal best) fixes that while still favoring quality overall.
+ */
 function pickSeeds(pool: RecipeIngredientSet[], seedCount: number): RecipeIngredientSet[] {
   if (pool.length <= seedCount) return pool;
   const sorted = [...pool].sort((a, b) => b.qualityScore - a.qualityScore);
   const topHalf = Math.ceil(seedCount / 2);
-  const topSeeds = sorted.slice(0, topHalf);
-  const rest = sorted.slice(topHalf);
+  const topCandidates = sorted.slice(0, Math.min(sorted.length, topHalf * 2));
+  const topSeeds = [...topCandidates].sort(() => Math.random() - 0.5).slice(0, topHalf);
+  const rest = sorted.filter((r) => !topSeeds.includes(r));
   const randomSeeds = [...rest].sort(() => Math.random() - 0.5).slice(0, seedCount - topHalf);
   return [...topSeeds, ...randomSeeds];
 }

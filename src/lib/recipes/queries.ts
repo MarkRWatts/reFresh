@@ -13,6 +13,8 @@ export interface RecipeListParams {
   search?: string;
   favouritesOnly?: boolean;
   importedOnly?: boolean;
+  /** Shows only user-hidden recipes instead of excluding them — see toggleHidden in hiddenActions.ts. The one place a hidden recipe can be found again to unhide it. */
+  hiddenOnly?: boolean;
   showAll?: boolean;
   sort?: SortOption;
   page?: number;
@@ -36,6 +38,7 @@ const RECIPE_SUMMARY_SELECT = {
   isFavourite: true,
   isUserCreated: true,
   isPdfImport: true,
+  isHidden: true,
 } satisfies Prisma.RecipeSelect;
 
 export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMMARY_SELECT }>;
@@ -52,6 +55,11 @@ export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
   const where: Prisma.RecipeWhereInput = {
     isBrowsable: true,
     ...(params.showAll ? {} : { variantOfId: null }),
+    // Hidden recipes drop out of every default view (browse, suggest) the
+    // same way non-browsable ones do — except the hidden-recipes filter
+    // itself, which needs to show exactly the opposite so a hidden recipe
+    // can be found again and unhidden.
+    isHidden: params.hiddenOnly ? true : false,
   };
 
   if (params.proteinTypes && params.proteinTypes.length > 0) {
@@ -145,6 +153,12 @@ export interface RecipeIngredientSetForSuggestion {
   ingredientIds: string[];
 }
 
+// How long a recipe sits out of the suggestion pool after appearing in a
+// /suggest result — long enough that "suggest a week" doesn't just show the
+// same handful of top-rated recipes on every visit, short enough that a
+// heavily-filtered pool doesn't run dry. See listRecipeIngredientSetsForSuggestion.
+const SUGGESTION_COOLDOWN_DAYS = 14;
+
 /**
  * The candidate pool for the auto-suggest optimizer: every recipe
  * matching the given filters (reusing the exact same buildWhere as the
@@ -153,12 +167,23 @@ export interface RecipeIngredientSetForSuggestion {
  * Unpaginated but capped — a few hundred candidates is already enough for
  * the greedy optimizer to find good combinations, and this needs to load
  * entirely into memory to run.
+ *
+ * Excludes recently-suggested recipes (see SUGGESTION_COOLDOWN_DAYS) by
+ * default — pass `excludeRecentlySuggested: false` to opt out, which the
+ * caller does as a fallback when the exclusion would leave too small a pool
+ * to suggest from (see suggest/page.tsx).
  */
 export async function listRecipeIngredientSetsForSuggestion(
   params: RecipeListParams,
   cap = 400,
+  { excludeRecentlySuggested = true }: { excludeRecentlySuggested?: boolean } = {},
 ): Promise<RecipeIngredientSetForSuggestion[]> {
   const where = buildWhere(params);
+  if (excludeRecentlySuggested) {
+    const cutoff = new Date(Date.now() - SUGGESTION_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+    const existingAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+    where.AND = [...existingAnd, { OR: [{ lastSuggestedAt: null }, { lastSuggestedAt: { lt: cutoff } }] }];
+  }
   const recipes = await prisma.recipe.findMany({
     where,
     select: {
@@ -181,6 +206,15 @@ export async function listRecipeIngredientSetsForSuggestion(
     ratingValue: r.ratingValue,
     ingredientIds: r.ingredients.map((i) => i.ingredientId),
   }));
+}
+
+/** Stamps lastSuggestedAt on every recipe that appeared in a /suggest result — not just the option the user picks, since the bug this exists to fix (the same recipes repeating) is about what gets *shown*, not what gets chosen. See listRecipeIngredientSetsForSuggestion's cooldown exclusion. */
+export async function markRecipesSuggested(recipeIds: string[]): Promise<void> {
+  if (recipeIds.length === 0) return;
+  await prisma.recipe.updateMany({
+    where: { id: { in: recipeIds } },
+    data: { lastSuggestedAt: new Date() },
+  });
 }
 
 /** Distinct cuisine values present in the DB, for populating a cuisine filter. */
