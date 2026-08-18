@@ -66,7 +66,8 @@ export async function commitPdfImportDraft(draftId: string, formData: FormData):
   // recipe's own folder and point the recipe at their final URLs.
   const { coverImageUrl, stepImageUrls } = await promoteDraftImages(draftId, recipe.id);
   const steps = readEditedSteps(formData, stepImageUrls).map((s) => ({
-    text: s.heading ? `${s.heading}\n\n${s.text}` : s.text,
+    heading: s.heading || null,
+    text: s.text,
     imageUrl: s.imageUrl,
     caption: null,
   }));

@@ -7,9 +7,11 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   experimental: {
     // Server Actions default to a 1MB request body limit — scanned recipe
-    // card PDFs (src/lib/pdfImport) routinely run 7-10MB+, so the default
-    // rejects every upload with a 413 before parseCardPdf ever runs.
-    serverActions: { bodySizeLimit: "20mb" },
+    // card PDFs (src/lib/pdfImport) routinely run 7-10MB+, and uploading
+    // several at once (the import page accepts a multi-file batch) or a
+    // large cover-photo replacement (recipeEditActions.ts) adds up fast, so
+    // this is set well above what a single normal upload needs.
+    serverActions: { bodySizeLimit: "100mb" },
   },
   // These ship native binaries (@napi-rs/canvas, sharp) or dynamically load
   // worker/wasm files at runtime (pdfjs-dist, tesseract.js) — bundling them
