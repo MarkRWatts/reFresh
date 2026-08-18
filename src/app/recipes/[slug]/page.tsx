@@ -10,6 +10,7 @@ import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
+import { localRecipeImageDimensions } from "@/lib/pdfImport/imageStorage";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
 import { parseRecipeSteps } from "@/lib/recipes/steps";
 import { cloneRecipe } from "@/lib/recipes/customRecipeActions";
@@ -40,6 +41,7 @@ export default async function RecipeDetailPage({
   const recipe = await getRecipeBySlug(slug);
   if (!recipe) notFound();
   const steps = parseRecipeSteps(recipe.steps);
+  const coverDimensions = hasUsableImage(recipe.imageUrl) ? await localRecipeImageDimensions(recipe.imageUrl) : null;
   const planRecipeIds = await getCurrentPlanRecipeIds();
   const hasNutrition = [
     recipe.calories,
@@ -172,20 +174,37 @@ export default async function RecipeDetailPage({
         </div>
 
         <div className="order-1 sm:order-2">
-          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-zinc-100">
-            {hasUsableImage(recipe.imageUrl) ? (
-              <Image
-                src={recipe.imageUrl}
-                alt={recipe.name}
-                fill
-                sizes="(min-width: 640px) 20rem, 100vw"
-                className="object-cover"
-                priority
-              />
-            ) : (
-              <RecipeImagePlaceholder />
-            )}
-          </div>
+          {hasUsableImage(recipe.imageUrl) && coverDimensions ? (
+            // A known local image (card scan / cookbook photo) renders at its
+            // own real aspect ratio rather than being forced into a fixed
+            // landscape crop — those sources aren't reliably landscape the
+            // way a scraped HelloFresh CDN photo is. See
+            // localRecipeImageDimensions.
+            <Image
+              src={recipe.imageUrl}
+              alt={recipe.name}
+              width={coverDimensions.width}
+              height={coverDimensions.height}
+              sizes="(min-width: 640px) 20rem, 100vw"
+              className="h-auto w-full rounded-2xl bg-zinc-100"
+              priority
+            />
+          ) : (
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-zinc-100">
+              {hasUsableImage(recipe.imageUrl) ? (
+                <Image
+                  src={recipe.imageUrl}
+                  alt={recipe.name}
+                  fill
+                  sizes="(min-width: 640px) 20rem, 100vw"
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                <RecipeImagePlaceholder />
+              )}
+            </div>
+          )}
 
           <IngredientsPanel
             baseServings={recipe.servings}

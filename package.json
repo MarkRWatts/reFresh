@@ -13,6 +13,7 @@
     "reprocess": "tsx scripts/scrape.ts --force",
     "detect-variants": "tsx scripts/detect-variants.ts",
     "import-pdf": "tsx scripts/import-pdf.ts",
+    "commit-vision-import": "tsx scripts/commit-vision-import.ts",
     "db:snapshot": "tsx scripts/db-snapshot.ts",
     "db:restore": "tsx scripts/db-restore.ts",
     "generate-favicon": "tsx scripts/generate-favicon.ts"
