@@ -107,6 +107,22 @@ model Recipe {
   // single-implicit-owner pattern as MealPlan). Toggled from the card and
   // detail page; also usable as a filter.
   isFavourite    Boolean     @default(false)
+  // A user-hidden auto-imported (HelloFresh-scraped) recipe — "I don't want
+  // to see this again," reversible, unlike deleting a custom/PDF recipe
+  // (which just removes the row — see recipeEditActions.ts's deleteRecipe).
+  // Always excluded from buildWhere() the same way isBrowsable is, unless
+  // explicitly asked for via the hiddenOnly filter, so it can be found again
+  // and unhidden. Distinct from isBrowsable: that's "is this even a real
+  // recipe" computed at scrape time, this is a personal preference toggle.
+  isHidden       Boolean     @default(false)
+  // Stamped whenever this recipe appears in any /suggest result (not just
+  // the one the user picks — see suggest/page.tsx), so a subsequent
+  // /suggest call can exclude recently-suggested recipes from the candidate
+  // pool (see listRecipeIngredientSetsForSuggestion). Fixes a reported bug
+  // where the same recipes kept coming back on every visit — the candidate
+  // pool was a deterministic top-rated query with no memory of what had
+  // already been shown.
+  lastSuggestedAt DateTime?
   // True for a recipe created by cloning + editing an existing one (see
   // clonedFromId below), rather than scraped from HelloFresh. hfId/slug are
   // still populated (with a synthetic hfId) so it fits the same unique-key
@@ -141,7 +157,9 @@ model Recipe {
   @@index([isBrowsable])
   @@index([variantOfId])
   @@index([isFavourite])
+  @@index([isHidden])
   @@index([clonedFromId])
+  @@index([lastSuggestedAt])
 }
 
 model Ingredient {

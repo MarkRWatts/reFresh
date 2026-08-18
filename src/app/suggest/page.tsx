@@ -3,7 +3,7 @@ import BackLink from "@/components/BackLink";
 import { addRecipesToPlan } from "@/lib/mealplan/actions";
 import { suggestMealCombinations } from "@/lib/mealplan/autoSuggest";
 import { computeSharedIngredients } from "@/lib/recipes/sharedIngredients";
-import { listRecipeIngredientSetsForSuggestion } from "@/lib/recipes/queries";
+import { listRecipeIngredientSetsForSuggestion, markRecipesSuggested } from "@/lib/recipes/queries";
 import {
   buildFilterQueryString,
   parseFilters,
@@ -24,10 +24,18 @@ export default async function SuggestPage({
   const rawCount = Number.parseInt(Array.isArray(raw.n) ? raw.n[0] : (raw.n ?? "3"), 10);
   const count = MEAL_COUNT_OPTIONS.includes(rawCount) ? rawCount : 3;
 
-  const pool = await listRecipeIngredientSetsForSuggestion(
-    toListParams(filters, CANDIDATE_POOL_CAP),
-    CANDIDATE_POOL_CAP,
-  );
+  const listParams = toListParams(filters, CANDIDATE_POOL_CAP);
+  let pool = await listRecipeIngredientSetsForSuggestion(listParams, CANDIDATE_POOL_CAP);
+  // A heavily-filtered pool can be small enough that excluding recently-
+  // suggested recipes (the default — see listRecipeIngredientSetsForSuggestion)
+  // leaves too few to suggest from at all; falling back to the unfiltered
+  // pool beats showing nothing. Recently-suggested recipes still get
+  // deprioritized naturally by pickSeeds' quality-based seeding either way.
+  if (pool.length < count) {
+    pool = await listRecipeIngredientSetsForSuggestion(listParams, CANDIDATE_POOL_CAP, {
+      excludeRecentlySuggested: false,
+    });
+  }
 
   const combinations = suggestMealCombinations(
     pool.map((r) => ({
@@ -48,6 +56,10 @@ export default async function SuggestPage({
       ),
     })),
   );
+
+  // Every recipe actually *shown* counts as "suggested," not just whichever
+  // option the user goes on to pick — see markRecipesSuggested.
+  await markRecipesSuggested(combinations.flatMap((c) => c.recipeIds));
 
   const filterQueryString = buildFilterQueryString(filters);
   const mealCountHref = (n: number) => {

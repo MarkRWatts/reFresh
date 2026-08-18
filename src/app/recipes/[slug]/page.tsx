@@ -106,7 +106,7 @@ export default async function RecipeDetailPage({
                 href={`/recipes/${recipe.slug}/edit`}
                 className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
               >
-                ✎ Edit ingredients
+                ✎ Edit recipe
               </Link>
             ) : (
               <form action={cloneRecipe.bind(null, recipe.id)}>
@@ -222,11 +222,6 @@ export default async function RecipeDetailPage({
                   <NutritionRow label="Salt" value={`${recipe.saltGrams} g`} />
                 )}
               </dl>
-              {recipe.isUserCreated && (
-                <p className="mt-2 text-xs text-amber-600">
-                  Inherited from the original recipe — may not reflect your edited ingredients.
-                </p>
-              )}
             </div>
           )}
 

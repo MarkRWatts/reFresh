@@ -3,6 +3,7 @@ import Link from "next/link";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import PlanToggleButton from "@/components/PlanToggleButton";
 import FavouriteToggleButton from "@/components/FavouriteToggleButton";
+import HideToggleButton from "@/components/HideToggleButton";
 import { PROTEIN_BADGE_STYLES, PROTEIN_LABELS } from "@/lib/recipes/filterPresets";
 import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import type { RecipeSummary } from "@/lib/recipes/queries";
@@ -38,8 +39,11 @@ export default function RecipeCard({
             <RecipeImagePlaceholder />
           )}
         </Link>
-        <div className="absolute right-2 top-2">
+        <div className="absolute right-2 top-2 flex flex-col gap-1.5">
           <FavouriteToggleButton recipeId={recipe.id} isFavourite={recipe.isFavourite} compact />
+          {!recipe.isUserCreated && (
+            <HideToggleButton recipeId={recipe.id} isHidden={recipe.isHidden} compact />
+          )}
         </div>
       </div>
 

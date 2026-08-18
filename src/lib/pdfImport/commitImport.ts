@@ -5,64 +5,11 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveIngredientId } from "@/lib/recipes/ingredientResolution";
-import { parseLeadingQuantity } from "@/lib/scraper/ingredientParser";
+import { numberField, readEditedIngredients, readEditedSteps } from "@/lib/recipes/formFields";
 import { classifyProteinType } from "@/lib/scraper/proteinType";
 import { slugify, uniqueSlug } from "@/lib/recipes/slug";
 import { promoteDraftImages } from "./imageStorage";
 import type { DraftRecipeData } from "./parseCardPdf";
-
-function numberField(formData: FormData, key: string): number | null {
-  const raw = formData.get(key);
-  if (typeof raw !== "string" || raw.trim() === "") return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
-interface EditedIngredient {
-  name: string;
-  quantity: number | null;
-  unit: string | null;
-}
-
-function readEditedIngredients(formData: FormData): EditedIngredient[] {
-  const names = formData.getAll("ingredientName");
-  const quantities = formData.getAll("ingredientQuantity");
-  const units = formData.getAll("ingredientUnit");
-  const rows: EditedIngredient[] = [];
-  for (let i = 0; i < names.length; i++) {
-    const name = String(names[i] ?? "").trim();
-    if (!name) continue; // an emptied name field is how a row gets dropped on review
-    const quantityRaw = String(quantities[i] ?? "").trim();
-    rows.push({
-      name,
-      quantity: quantityRaw ? parseLeadingQuantity(quantityRaw) : null,
-      unit: String(units[i] ?? "").trim() || null,
-    });
-  }
-  return rows;
-}
-
-interface EditedStep {
-  heading: string;
-  text: string;
-  imageUrl: string | null;
-}
-
-function readEditedSteps(formData: FormData, stepImageUrls: (string | null)[]): EditedStep[] {
-  const headings = formData.getAll("stepHeading");
-  const texts = formData.getAll("stepText");
-  const steps: EditedStep[] = [];
-  for (let i = 0; i < texts.length; i++) {
-    const text = String(texts[i] ?? "").trim();
-    if (!text) continue;
-    steps.push({
-      heading: String(headings[i] ?? "").trim(),
-      text,
-      imageUrl: stepImageUrls[i] ?? null,
-    });
-  }
-  return steps;
-}
 
 /**
  * Turns a reviewed-and-edited PDF import draft into a real, browsable

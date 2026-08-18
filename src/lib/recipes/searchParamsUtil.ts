@@ -32,6 +32,7 @@ export interface ParsedFilters {
   search?: string;
   favouritesOnly: boolean;
   importedOnly: boolean;
+  hiddenOnly: boolean;
   showAll: boolean;
   sort: SortOption;
   page: number;
@@ -65,6 +66,7 @@ export function parseFilters(raw: RawSearchParams): ParsedFilters {
     search: first(raw.q) || undefined,
     favouritesOnly: first(raw.fav) === "1",
     importedOnly: first(raw.imported) === "1",
+    hiddenOnly: first(raw.hidden) === "1",
     showAll: first(raw.all) === "1",
     sort,
     page,
@@ -82,6 +84,7 @@ export function toListParams(filters: ParsedFilters, pageSize: number): RecipeLi
     search: filters.search,
     favouritesOnly: filters.favouritesOnly,
     importedOnly: filters.importedOnly,
+    hiddenOnly: filters.hiddenOnly,
     showAll: filters.showAll,
     sort: filters.sort,
     page: filters.page,
@@ -105,6 +108,7 @@ export function buildFilterQueryString(
   if (filters.search) params.set("q", filters.search);
   if (filters.favouritesOnly) params.set("fav", "1");
   if (filters.importedOnly) params.set("imported", "1");
+  if (filters.hiddenOnly) params.set("hidden", "1");
   if (filters.showAll) params.set("all", "1");
   if (filters.sort && filters.sort !== "rating") params.set("sort", filters.sort);
   if (filters.page && filters.page > 1) params.set("page", String(filters.page));

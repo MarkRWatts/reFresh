@@ -4,15 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { resolveIngredientId } from "./ingredientResolution";
 import { classifyProteinType } from "@/lib/scraper/proteinType";
 import { slugify, uniqueSlug } from "./slug";
 
 /**
  * Duplicates a recipe (and its ingredients) into a new editable copy, then
- * sends the user straight to the ingredient editor for it — the
- * recipe-authoring equivalent of a fork. Nutrition/steps/etc. are copied
- * as-is from the source; only ingredients are editable in this first cut.
+ * sends the user straight to the full editor for it (see
+ * recipeEditActions.ts) — the recipe-authoring equivalent of a fork.
+ * Nutrition/steps/ingredients all start out copied as-is from the source,
+ * editable from there.
  */
 export async function cloneRecipe(sourceRecipeId: string): Promise<void> {
   const source = await prisma.recipe.findUniqueOrThrow({
@@ -63,8 +63,8 @@ export async function cloneRecipe(sourceRecipeId: string): Promise<void> {
   redirect(`/recipes/${clone.slug}/edit`);
 }
 
-/** Re-derives proteinType from a recipe's current ingredient list — called after every add/remove so the badge/filter stay meaningful post-edit. */
-async function refreshProteinType(recipeId: string): Promise<void> {
+/** Re-derives proteinType from a recipe's current ingredient list — called after every ingredient edit so the badge/filter stay meaningful post-edit (see also recipeEditActions.ts's updateRecipeFields). */
+export async function refreshProteinType(recipeId: string): Promise<void> {
   const recipe = await prisma.recipe.findUniqueOrThrow({ where: { id: recipeId } });
   const ingredients = await prisma.recipeIngredient.findMany({
     where: { recipeId },
@@ -79,44 +79,3 @@ async function refreshProteinType(recipeId: string): Promise<void> {
   await prisma.recipe.update({ where: { id: recipeId }, data: { proteinType } });
 }
 
-export async function addCustomIngredient(recipeId: string, formData: FormData): Promise<void> {
-  const recipe = await prisma.recipe.findUniqueOrThrow({ where: { id: recipeId } });
-  if (!recipe.isUserCreated) throw new Error("Only custom recipes can be edited");
-
-  const name = String(formData.get("name") ?? "").trim();
-  if (!name) return;
-  const quantityRaw = String(formData.get("quantity") ?? "").trim();
-  const unit = String(formData.get("unit") ?? "").trim() || null;
-  const quantity = quantityRaw ? Number(quantityRaw) : null;
-
-  const ingredientId = await resolveIngredientId(name);
-  const rawText = [quantityRaw, unit, name].filter(Boolean).join(" ");
-
-  await prisma.recipeIngredient.create({
-    data: {
-      recipeId,
-      ingredientId,
-      quantity: quantity != null && Number.isFinite(quantity) ? quantity : null,
-      unit,
-      rawText,
-    },
-  });
-
-  await refreshProteinType(recipeId);
-  revalidatePath(`/recipes/${recipe.slug}/edit`);
-  revalidatePath(`/recipes/${recipe.slug}`);
-}
-
-export async function removeCustomIngredient(recipeIngredientId: string): Promise<void> {
-  const ri = await prisma.recipeIngredient.findUniqueOrThrow({
-    where: { id: recipeIngredientId },
-    include: { recipe: true },
-  });
-  if (!ri.recipe.isUserCreated) throw new Error("Only custom recipes can be edited");
-
-  await prisma.recipeIngredient.delete({ where: { id: recipeIngredientId } });
-  await refreshProteinType(ri.recipeId);
-
-  revalidatePath(`/recipes/${ri.recipe.slug}/edit`);
-  revalidatePath(`/recipes/${ri.recipe.slug}`);
-}
