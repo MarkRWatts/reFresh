@@ -2,6 +2,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import BackLink from "@/components/BackLink";
+import SubmitButton from "@/components/SubmitButton";
 import { commitPdfImportDraft } from "@/lib/pdfImport/commitImport";
 import { discardPdfImportDraft } from "@/lib/pdfImport/draftActions";
 import { draftImageUrls } from "@/lib/pdfImport/imageStorage";
@@ -102,7 +103,8 @@ export default async function ReviewImportPage({
           <p className="mt-1 text-xs text-zinc-500">
             Quantities default to the first serving size read off the card — the figures for
             other sizes are shown for reference only, so if you pick a different serving size
-            above, update the quantity fields to match. Clear a name to drop that row; new
+            above, update the quantity fields to match. Qty accepts fractions (e.g. &ldquo;1/2&rdquo;
+            or &ldquo;&frac12;&rdquo;) as well as decimals. Clear a name to drop that row; new
             ingredients can be added after saving, from the recipe&rsquo;s own edit page.
           </p>
           <div className="mt-3 space-y-2">
@@ -114,7 +116,7 @@ export default async function ReviewImportPage({
               return (
                 <div key={i} className="flex flex-wrap items-end gap-2 border-t border-zinc-100 pt-2 first:border-t-0 first:pt-0">
                   <div className="w-20">
-                    <TextField label="Qty" name="ingredientQuantity" type="number" defaultValue={first?.quantity ?? ""} />
+                    <TextField label="Qty" name="ingredientQuantity" defaultValue={first?.quantity ?? ""} />
                   </div>
                   <div className="w-24">
                     <TextField label="Unit" name="ingredientUnit" defaultValue={first?.unit ?? ""} />
@@ -170,12 +172,11 @@ export default async function ReviewImportPage({
           </div>
         </div>
 
-        <button
-          type="submit"
-          className="rounded-full border border-emerald-600 bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-        >
-          Save recipe
-        </button>
+        <SubmitButton
+          label="Save recipe"
+          pendingLabel="Saving…"
+          className="inline-flex items-center rounded-full border border-emerald-600 bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-emerald-300 disabled:bg-emerald-300"
+        />
       </form>
 
       <form action={discardPdfImportDraft.bind(null, draftId)} className="mt-3">

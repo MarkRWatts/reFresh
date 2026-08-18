@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import PlanDrawerRoot from "@/components/PlanDrawerRoot";
@@ -37,8 +38,16 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-zinc-50 font-sans text-zinc-900">
         <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur print:hidden">
           <div className="mx-auto flex max-w-7xl items-center px-4 py-3 sm:px-6">
-            <Link href="/" className="flex items-center">
+            <Link href="/" className="flex items-center gap-2">
               <Logo />
+              <Image
+                src="/brand/wordmark.png"
+                alt="HelloFresh re:Mixed"
+                width={1895}
+                height={271}
+                className="h-4 w-auto sm:h-6 md:h-7"
+                priority
+              />
             </Link>
             <PlanDrawerRoot />
           </div>

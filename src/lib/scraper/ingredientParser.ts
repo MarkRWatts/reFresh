@@ -127,7 +127,7 @@ const UNICODE_FRACTIONS: Record<string, number> = {
 const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join("");
 
 /** Parses a leading quantity token: plain numbers, simple fractions ("1/2"), unicode fractions ("½"), and mixed forms ("1½"). */
-function parseLeadingQuantity(token: string): number | null {
+export function parseLeadingQuantity(token: string): number | null {
   const fractionMatch = /^(\d+)\/(\d+)$/.exec(token);
   if (fractionMatch) {
     return Number(fractionMatch[1]) / Number(fractionMatch[2]);

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import BackLink from "@/components/BackLink";
+import SubmitButton from "@/components/SubmitButton";
 import { uploadPdfImports, discardPdfImportDraft } from "@/lib/pdfImport/draftActions";
 import type { DraftRecipeData } from "@/lib/pdfImport/parseCardPdf";
 
@@ -48,12 +49,14 @@ export default async function ImportPdfPage({
           required
           className="mx-auto block text-sm text-zinc-600 file:mr-3 file:rounded-full file:border-0 file:bg-emerald-600 file:px-4 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
         />
-        <button
-          type="submit"
-          className="mt-4 rounded-full border border-emerald-600 bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
-        >
-          Upload
-        </button>
+        <p className="mt-2 text-xs text-zinc-400">
+          Each card is read with OCR — this can take a minute or more, longer for several at once.
+        </p>
+        <SubmitButton
+          label="Upload"
+          pendingLabel="Reading card(s)…"
+          className="mt-4 inline-flex items-center rounded-full border border-emerald-600 bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-emerald-300 disabled:bg-emerald-300"
+        />
       </form>
 
       {drafts.length > 0 && (

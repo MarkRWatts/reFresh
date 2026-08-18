@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveIngredientId } from "@/lib/recipes/ingredientResolution";
+import { parseLeadingQuantity } from "@/lib/scraper/ingredientParser";
 import { classifyProteinType } from "@/lib/scraper/proteinType";
 import { slugify, uniqueSlug } from "@/lib/recipes/slug";
 import { promoteDraftImages } from "./imageStorage";
@@ -34,7 +35,7 @@ function readEditedIngredients(formData: FormData): EditedIngredient[] {
     const quantityRaw = String(quantities[i] ?? "").trim();
     rows.push({
       name,
-      quantity: quantityRaw ? Number(quantityRaw) : null,
+      quantity: quantityRaw ? parseLeadingQuantity(quantityRaw) : null,
       unit: String(units[i] ?? "").trim() || null,
     });
   }
