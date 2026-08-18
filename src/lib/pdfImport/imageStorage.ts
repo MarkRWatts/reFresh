@@ -1,5 +1,6 @@
 import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
 import type { ParsedCardRecipe } from "./parseCardPdf";
 
 // Not under public/ — that directory is baked into the Docker image at
@@ -235,4 +236,30 @@ export function resolveRecipeImagePath(segments: string[]): string | null {
   const root = path.resolve(RECIPE_IMAGES_DIR);
   if (!path.resolve(resolved).startsWith(root + path.sep)) return null;
   return resolved;
+}
+
+const LOCAL_IMAGE_URL_PREFIX = "/api/recipe-images/";
+
+/**
+ * Reads a local recipe image's real pixel dimensions straight off disk, so
+ * the recipe detail page's hero photo can render at its natural aspect
+ * ratio instead of being forced into a fixed landscape crop — a card-scan
+ * or cookbook-photo cover isn't reliably landscape the way a scraped
+ * HelloFresh CDN photo is (see RecipeDetailPage). Returns null for a
+ * `Recipe.imageUrl` that isn't one of this app's own local image routes
+ * (an external CDN URL, which this can't stat locally), or if the file
+ * can't be read — the caller falls back to the fixed-crop treatment either
+ * way.
+ */
+export async function localRecipeImageDimensions(imageUrl: string): Promise<{ width: number; height: number } | null> {
+  if (!imageUrl.startsWith(LOCAL_IMAGE_URL_PREFIX)) return null;
+  const segments = imageUrl.slice(LOCAL_IMAGE_URL_PREFIX.length).split("/");
+  const filePath = resolveRecipeImagePath(segments);
+  if (!filePath) return null;
+  try {
+    const { width, height } = await sharp(filePath).metadata();
+    return width && height ? { width, height } : null;
+  } catch {
+    return null;
+  }
 }
