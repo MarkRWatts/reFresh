@@ -15,6 +15,7 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - [Stack](#stack)
 - [Getting started](#getting-started)
 - [Populating the database](#populating-the-database)
+- [Importing recipes from a scan](#importing-recipes-from-a-scan)
 - [Deploying with Docker](#deploying-with-docker)
 - [npm scripts](#npm-scripts)
 - [Project structure](#project-structure)
@@ -31,7 +32,8 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - **Printing**: a dedicated print button on every recipe page (strips the app chrome down to just the recipe itself), and a separate printable, checklist-style shopping-list page linked from the planner — quantities reflect whatever serving counts you've set.
 - **Auto-suggest**: given the currently active browse filters, greedily picks combinations of recipes that maximize shared ingredients (a real optimization, not just "recipes with similar names") — never repeats a recipe across the returned options.
 - **Favourites**: heart-toggle on cards and the detail page, plus a filter.
-- **Custom recipes**: clone any recipe and edit its ingredient list (add/remove) — a "My recipe" badge distinguishes these from the scraped catalog, and its protein-type classification is re-derived automatically as you edit.
+- **Custom & imported recipes**: clone any recipe to edit, or import one from a scanned/photographed card — a "My recipe" / "From a card scan" badge distinguishes these from the scraped catalog. The full editor (name, subtitle, cook time, ingredients, nutrition, steps, cover photo) is available for any of these, with protein-type classification re-derived automatically as you edit, plus a confirm-guarded delete. See [Importing recipes from a scan](#importing-recipes-from-a-scan) for the two ways to do the import itself.
+- **Hide auto-imported recipes**: reversible per-recipe hide (distinct from deleting, which is only for custom/imported recipes) with a "Hidden" filter to find and unhide them.
 
 ## Stack
 
@@ -74,6 +76,27 @@ Two ways to get real data, in order of preference:
    npm run detect-variants             # cluster near-duplicate recipes (run after any (re-)scrape)
    ```
    Every fetched page is cached to disk (`.cache/hellofresh/html/`, gitignored), so re-running the scraper — or changing parsing/classification logic and running `npm run reprocess` — never re-hits the network for a page it's already seen. `npm run detect-variants` should be re-run any time the *browsable* recipe set changes (a fresh crawl, or a `computeIsBrowsable`/classification change), since it resets and recomputes `Recipe.variantOfId` for the whole catalog each time.
+
+## Importing recipes from a scan
+
+Two ways to turn a photographed/scanned recipe into a real, editable `Recipe` row — both share the same downstream persistence (image storage, ingredient resolution, protein classification, slugging), they only differ in how the card gets *read*.
+
+### From the app (OCR, one card at a time)
+
+Go to `/recipes/import` (linked from the card browser) and upload a **2-page** HelloFresh card PDF — front page (title/photo), back page (ingredients/method/nutrition). This is read automatically by `src/lib/pdfImport/parseCardPdf.ts` (Tesseract OCR over fixed-fraction crops, self-correcting against detected header text for layout drift — see [How it works](#how-it-works)), then lands on a review screen showing exactly what was read next to each field, with any low-confidence reads flagged as warnings. **Nothing is saved until you review and submit** — OCR on a scan is never perfect, so check the numbers (especially quantities and the nutrition table) before saving. Multiple files can be uploaded at once; each becomes its own pending draft to review separately, and a draft that fails to parse at all doesn't block the rest of the batch.
+
+Only a handful of known HelloFresh card layouts are supported (`src/lib/pdfImport/regions.ts`'s `CARD_TEMPLATES`) — an unrecognized layout is rejected with a message to enter it manually instead via the recipe editor.
+
+### Batch import via a Claude Code session (vision-based, no OCR)
+
+For a batch of cards, cookbook photos, or anything an unsupported/imperfect OCR layout would mangle, `scripts/vision-import-prompt.md` is a self-contained runbook to paste into a fresh Claude Code session running in this repo. Instead of Tesseract, a vision-capable model reads the rendered page images directly — far more accurate in practice (correctly handles layout variants like a "Custom Recipe" swap block, single-serving legacy layouts, and even a plain photographed cookbook page with no nutrition data at all), and since the reading happens inside the Claude Code session itself rather than via a separate API call, it doesn't cost separate API credits.
+
+```bash
+# drop PDFs (or photos) into storage/pdf-import/inbox/, then paste
+# scripts/vision-import-prompt.md as your first message to a fresh session
+```
+
+**There is no review screen on this path** — the session commits straight to the database via `npm run commit-vision-import -- <staging-dir>` (a thin wrapper around `src/lib/pdfImport/commitVisionImport.ts`), so accuracy depends entirely on the transcription being checked before committing, same as the runbook itself instructs. Useful for populating a fresh environment (e.g. mirroring recipes imported on a dev database across to production — copy each recipe's data + images into a staging folder matching `VisionCardData`'s shape, then run the same commit script against the target database).
 
 ## Deploying with Docker
 
@@ -118,6 +141,8 @@ The app runs on a TrueNAS-hosted Ubuntu VM, behind a Caddy reverse proxy shared 
 | `npm run scrape -- [flags]` | Crawl the HelloFresh sitemap into Postgres. Flags: `--sample=N` (stratified sample across the whole sitemap), `--limit=N` (stop after N *new* pages), `--concurrency=N` (default 5), `--delay-ms=N` (default 200, politeness delay between live fetches), `--force` (re-process every sitemap URL even if already up to date) |
 | `npm run reprocess` | `scrape --force`, but every page is already cached — reapplies current parsing/classification logic to the whole catalog with **zero network requests**. This is the standard way to backfill a code change (see [How it works](#how-it-works)) |
 | `npm run detect-variants` | Re-cluster near-duplicate recipes across the whole browsable catalog |
+| `npm run import-pdf -- <path.pdf> [--dump-crops <dir>]` | Debug entry point for the OCR card parser — prints what was read from one PDF (optionally dumping its cover/step-photo crops) without touching the database |
+| `npm run commit-vision-import -- <staging-dir> [servingIndex]` | Commits one vision-transcribed card (a `data.json` + its referenced images in `<staging-dir>`) straight into the database — see [Importing recipes from a scan](#importing-recipes-from-a-scan) |
 | `npm run db:snapshot` | `pg_dump` the database to `db-backups/refresh.dump` |
 | `npm run db:restore` | Restore `db-backups/refresh.dump` into the configured database (must already exist, e.g. via `createdb`) |
 | `npm run generate-favicon` | Regenerate `src/app/favicon.ico` + `src/app/apple-icon.png` from the icon sources in `src/lib/brand/` and `public/brand/refresh-icon.png` |
@@ -131,14 +156,22 @@ prisma/
 scripts/
   scrape.ts                 # sitemap crawl + per-page parse + upsert
   detect-variants.ts        # near-duplicate clustering job
+  import-pdf.ts              # OCR card-parser debug entry point (see below)
+  commit-vision-import.ts    # commits a vision-transcribed staging dir into the DB (see below)
+  vision-import-prompt.md    # self-contained runbook for a Claude Code batch-import session
   db-snapshot.ts / db-restore.ts
   generate-favicon.ts
 public/
   brand/refresh-icon.png    # icon master — header logo + apple-icon.png source
+storage/                    # gitignored — RECIPE_IMAGES_DIR default (Docker volume in prod)
+  recipe-images/             # cover/step photos for custom/imported recipes, keyed by recipe id
+  pdf-import/                 # working area for the vision batch-import workflow (inbox/staging/done/failed)
 src/
   app/                      # Next.js App Router routes
     page.tsx                 # card browser ("/")
-    recipes/[slug]/           # detail page, + edit/ for custom-recipe ingredient editing
+    recipes/[slug]/           # detail page, + edit/ for the full custom/imported-recipe editor
+    recipes/import/            # OCR card upload + per-draft review screen
+    api/recipe-images/         # serves storage/recipe-images/* (not under public/ — see comment in imageStorage.ts)
     suggest/                  # auto-suggest page
     plan/print/                # printable shopping list
   components/                # mostly small client islands next to Server Component pages
@@ -146,7 +179,9 @@ src/
     scraper/                 # sitemap fetch, JSON-LD/app-data parsing, ingredient-line parsing,
                               #   canonicalization, protein-type classification, DB upsert
     recipes/                 # query layer, filters, shared-ingredients/shopping-list math,
-                              #   variant detection, custom-recipe clone/edit actions
+                              #   variant detection, custom-recipe clone/edit/delete/hide actions
+    pdfImport/                # scanned-card parsing (OCR + vision-import), review-draft persistence,
+                              #   image storage — see "Importing recipes from a scan"
     mealplan/                 # the (single, implicit) weekly plan: queries, actions, auto-suggest
     favourites/                # favourite toggle action
     brand/                     # 16/32/48px icon sources for favicon.ico
@@ -161,13 +196,16 @@ Recipe(
   cookMinutes, servings, calories,
   fatGrams, saturatedFatGrams, carbsGrams, sugarGrams, proteinGrams, fiberGrams, saltGrams,
   proteinType, proteinTypeManualOverride, cuisine, category,
-  steps (Json),                          // [{text, imageUrl, caption}]
+  steps (Json),                          // [{heading, text, imageUrl, caption}]
   ratingValue, ratingCount,
   isPublished, isActive,                 // HelloFresh's own metadata, informational only
   isBrowsable,                           // computed at scrape time — see computeIsBrowsable
   variantOfId -> Recipe,                 // near-duplicate clustering, recomputed wholesale by detect-variants
   isFavourite,
+  isHidden,                              // reversible per-recipe hide (auto-imported recipes only)
   isUserCreated, clonedFromId -> Recipe, // custom recipes (clone & edit)
+  isPdfImport,                           // more specific than isUserCreated — imported from a scanned card
+  lastSuggestedAt,                       // stamped on every /suggest appearance, so results don't repeat
   lastScrapedAt, createdAt, updatedAt,
 )
 Ingredient(id, canonicalName, category)
@@ -175,6 +213,7 @@ IngredientAlias(id, rawText, ingredientId -> Ingredient)   // raw scraped/typed 
 RecipeIngredient(id, recipeId -> Recipe, ingredientId -> Ingredient, quantity, unit, rawText)
 MealPlan(id, label, createdAt)                              // single implicit plan, no auth/multi-user
 MealPlanRecipe(id, mealPlanId -> MealPlan, recipeId -> Recipe, servings)  // servings: null = use recipe's own base
+PdfImportDraft(id, originalFilename, templateId, data (Json), createdAt)  // OCR-import staging row, see below
 ```
 
 `ProteinType` enum: `CHICKEN | TURKEY | BEEF | LAMB | PORK | DUCK | VENISON | MEAT_OTHER | FISH | VEGETARIAN | VEGAN | UNKNOWN`.
@@ -193,6 +232,10 @@ A few things that aren't obvious from the schema/routes alone:
 
 **Missing-image visibility.** hellofresh.co.uk never shows a recipe tile without a photo, so `computeIsBrowsable` (`src/lib/scraper/upsertRecipe.ts`) treats a missing/unusable image as a visibility signal, not just a display fallback — alongside the more obvious "zero ingredients" and "one step" stub-page checks.
 
+**Two independent ways to turn a scan into a `Recipe` row, sharing one persistence layer.** `src/lib/pdfImport/commitImport.ts` (the in-app OCR review screen) and `commitVisionImport.ts` (the batch/vision path) don't call each other — the first takes a human-reviewed `FormData` submission and needs a real Next.js request context for its `redirect()`/`revalidatePath()` calls, while the second is driven by a plain script with no such context. Rather than force one into the other's shape, they instead both call the same underlying lib functions directly (`resolveIngredientId`, `classifyProteinType`, `saveDraftImages`/`promoteDraftImages`, slug generation) — so neither path can drift from how the other actually persists a recipe.
+
+**Cover photos aren't forced into a landscape crop on the recipe detail page.** A scraped HelloFresh CDN photo is reliably landscape, but a card scan or (especially) a photographed cookbook page often isn't — `localRecipeImageDimensions` (`src/lib/pdfImport/imageStorage.ts`) reads a local recipe image's real pixel size straight off disk so the hero photo can render at its own aspect ratio instead of being `object-cover`-cropped into a fixed box. Only applies to local images (this app's own `/api/recipe-images/...` route) — an external CDN URL falls back to the original fixed-crop treatment, since there's no local file to stat. The card/grid thumbnail always crops to a consistent landscape tile regardless, for grid consistency.
+
 <a id="schema-migrations"></a>**Schema migrations are mostly hand-applied, not `prisma migrate dev`-generated.** `migrate dev` requires interactive confirmation for destructive changes and can't auto-diff some changes at all (e.g. splitting the `ProteinType` enum's `MEAT` value into `CHICKEN`/`BEEF`/`PORK`/etc. — Postgres can't just add new enum values when one is also being removed, so the diff needs a data-preserving `CASE` expression Prisma can't generate on its own). The pattern used throughout this project:
 ```bash
 npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script > migration.sql
@@ -205,10 +248,10 @@ npx prisma migrate resolve --applied <timestamp>_<name>
 ## Known limitations
 
 - Full history and reasoning for all of these: [`project-plan.md § Open items to revisit later`](../reFresh-docs/project-plan.md).
-- Hosting is deferred — this has only ever run locally.
 - Protein-type classification and the variant-detection similarity threshold are both heuristics, tuned by spot-checking real data rather than exhaustively validated; expect occasional misclassifications.
 - No true cross-unit quantity conversion in the shopping list (e.g. tbsp → ml) — an ingredient specified in two different units across recipes shows as two separate totals.
-- Custom (cloned) recipes only support editing the ingredient list so far — steps, cook time, servings, etc. still come from the original.
+- OCR-based card scanning (the in-app `/recipes/import` flow) is imperfect by design — always check the review screen before saving. The vision-based batch alternative is far more accurate but isn't wired into the web UI at all; it's a separate Claude Code workflow (see [Importing recipes from a scan](#importing-recipes-from-a-scan)) with no review step of its own, so a bad transcription there goes straight into the database.
+- Only a handful of known HelloFresh card print layouts are recognized by the OCR path; an unsupported layout has to be entered manually (or via the vision-based path, which doesn't have this limitation).
 
 ## License
 
