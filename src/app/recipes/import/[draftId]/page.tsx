@@ -3,35 +3,11 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import BackLink from "@/components/BackLink";
 import SubmitButton from "@/components/SubmitButton";
+import { TextField, SourceCropPreview, NutritionFieldsSection, StepsFieldsSection } from "@/components/RecipeEditorFields";
 import { commitPdfImportDraft } from "@/lib/pdfImport/commitImport";
 import { discardPdfImportDraft } from "@/lib/pdfImport/draftActions";
 import { draftImageUrls } from "@/lib/pdfImport/imageStorage";
 import type { DraftRecipeData } from "@/lib/pdfImport/parseCardPdf";
-
-function TextField({
-  label,
-  name,
-  defaultValue,
-  type = "text",
-}: {
-  label: string;
-  name: string;
-  defaultValue: string | number;
-  type?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-zinc-500">{label}</span>
-      <input
-        name={name}
-        type={type}
-        defaultValue={defaultValue}
-        step={type === "number" ? "any" : undefined}
-        className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-      />
-    </label>
-  );
-}
 
 export default async function ReviewImportPage({
   params,
@@ -43,7 +19,8 @@ export default async function ReviewImportPage({
   if (!draft) notFound();
 
   const data = draft.data as unknown as DraftRecipeData;
-  const { coverImageUrl, stepImageUrls } = await draftImageUrls(draftId, data.steps.length);
+  const { coverImageUrl, stepImageUrls, ingredientsImageUrl, nutritionImageUrl, stepTextImageUrls } =
+    await draftImageUrls(draftId, data.steps.length);
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-6">
@@ -107,6 +84,7 @@ export default async function ReviewImportPage({
             or &ldquo;&frac12;&rdquo;) as well as decimals. Clear a name to drop that row; new
             ingredients can be added after saving, from the recipe&rsquo;s own edit page.
           </p>
+          <SourceCropPreview src={ingredientsImageUrl} alt="Ingredients, as scanned" />
           <div className="mt-3 space-y-2">
             {data.ingredients.map((row, i) => {
               const first = row.byServing[0];
@@ -131,46 +109,13 @@ export default async function ReviewImportPage({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200 p-4">
-          <h2 className="text-sm font-semibold text-zinc-900">Nutrition (per serving)</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <TextField label="Calories" name="calories" type="number" defaultValue={data.calories ?? ""} />
-            <TextField label="Fat (g)" name="fatGrams" type="number" defaultValue={data.fatGrams ?? ""} />
-            <TextField label="Saturates (g)" name="saturatedFatGrams" type="number" defaultValue={data.saturatedFatGrams ?? ""} />
-            <TextField label="Carbs (g)" name="carbsGrams" type="number" defaultValue={data.carbsGrams ?? ""} />
-            <TextField label="Sugar (g)" name="sugarGrams" type="number" defaultValue={data.sugarGrams ?? ""} />
-            <TextField label="Protein (g)" name="proteinGrams" type="number" defaultValue={data.proteinGrams ?? ""} />
-            <TextField label="Salt (g)" name="saltGrams" type="number" defaultValue={data.saltGrams ?? ""} />
-            <TextField label="Fibre (g)" name="fiberGrams" type="number" defaultValue={data.fiberGrams ?? ""} />
-          </div>
-        </div>
+        <NutritionFieldsSection
+          nutrition={data}
+          sourceCropUrl={nutritionImageUrl}
+          withOptionalIngredient={data.nutritionWithOptionalIngredient}
+        />
 
-        <div className="rounded-2xl border border-zinc-200 p-4">
-          <h2 className="text-sm font-semibold text-zinc-900">Steps ({data.steps.length})</h2>
-          <div className="mt-3 space-y-4">
-            {data.steps.map((step, i) => (
-              <div key={i} className="flex gap-3 border-t border-zinc-100 pt-4 first:border-t-0 first:pt-0">
-                {stepImageUrls[i] && (
-                  <div className="relative aspect-[4/3] w-28 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
-                    <Image src={stepImageUrls[i]} alt={`Step ${i + 1}`} fill sizes="7rem" className="object-cover" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1 space-y-2">
-                  <TextField label="Heading" name="stepHeading" defaultValue={step.heading ?? ""} />
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs text-zinc-500">Instructions</span>
-                    <textarea
-                      name="stepText"
-                      defaultValue={step.text}
-                      rows={3}
-                      className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-                    />
-                  </label>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <StepsFieldsSection steps={data.steps} stepImageUrls={stepImageUrls} stepTextImageUrls={stepTextImageUrls} />
 
         <SubmitButton
           label="Save recipe"

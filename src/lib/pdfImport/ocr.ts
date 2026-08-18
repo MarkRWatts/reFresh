@@ -37,6 +37,15 @@ export interface OcrLine {
   text: string;
   /** Vertical center of the line within the crop, in pixels — lets callers match up rows read from two separately-cropped columns by position instead of by array index, which breaks whenever the two crops don't segment into the same number of lines (see parseCardPdf.ts). */
   y: number;
+  /**
+   * The line's fitted baseline, in the same pixel space as `y` — null
+   * whenever Tesseract couldn't fit one (very short/sparse lines). Used for
+   * two things bbox alone can't give: the line's horizontal extent (deskew.ts's
+   * findAnchor, colorDetect.ts's isReddishLine) and its precise tilt
+   * (deskew.ts's detectSkewAngle) — a plain top/bottom bbox is noisier for
+   * tilt than the baseline Tesseract already fits per line.
+   */
+  baseline: { x0: number; y0: number; x1: number; y1: number } | null;
 }
 
 /** Like recognizeText, but returns each line with its vertical position instead of one flattened string. Used for narrow table-cell crops (ingredient names/quantities, nutrition labels/values) — SPARSE_TEXT suits a stack of short, disconnected lines far better than the default full-page-layout assumption, which was misreading digits as letters ("1" as "I") more often than not. */
@@ -49,7 +58,12 @@ export async function recognizeLines(imageBuffer: Buffer): Promise<OcrLine[]> {
     for (const paragraph of block.paragraphs) {
       for (const line of paragraph.lines) {
         const text = line.text.trim();
-        if (text) lines.push({ text, y: (line.bbox.y0 + line.bbox.y1) / 2 });
+        if (!text) continue;
+        const baseline =
+          line.baseline && line.baseline.x1 > line.baseline.x0
+            ? { x0: line.baseline.x0, y0: line.baseline.y0, x1: line.baseline.x1, y1: line.baseline.y1 }
+            : null;
+        lines.push({ text, y: (line.bbox.y0 + line.bbox.y1) / 2, baseline });
       }
     }
   }

@@ -1,11 +1,17 @@
 import { splitNameAndSubtitle } from "@/lib/scraper/fieldParsers";
 import { parseIngredientLine } from "@/lib/scraper/ingredientParser";
 import { recognizeText, recognizeLines, type OcrLine } from "./ocr";
-import { rasterizePdf } from "./rasterize";
+import { rasterizePdf, type RasterPage } from "./rasterize";
+import { deskewPage, findAnchor, findColumnHeaderPositions } from "./deskew";
+import { isReddishLine } from "./colorDetect";
 import {
   cropRegion,
+  shiftIngredientsRegion,
+  shiftNutritionRegion,
+  unionRegion,
   CARD_TEMPLATES,
   type CardTemplate,
+  type FractionalRegion,
   type IngredientsRegion,
   type NutritionRegion,
   type StepsRegion,
@@ -29,6 +35,8 @@ export interface ParsedCardStep {
   text: string;
   /** Null when this step has no photo on the card — either the layout never had one for this step, or (for a "flowing" step layout, see regions.ts) photos couldn't be reliably matched to steps at all. */
   photo: Buffer | null;
+  /** The exact crop OCR read this step's text from — shown next to the instructions field on the review screen so a misread is easy to spot. Null for a "flowing" step layout (see regions.ts), where steps are split out of shared multi-step text after the fact and have no crop of their own. */
+  textCrop: Buffer | null;
 }
 
 export interface ParsedCardRecipe {
@@ -37,6 +45,10 @@ export interface ParsedCardRecipe {
   subtitle: string | null;
   cookMinutes: number | null;
   coverPhoto: Buffer;
+  /** The union of the ingredient table/list's sub-regions, as one crop — see regions.ts's unionRegion. Shown on the review screen next to the ingredient rows it produced. Null only if the layout defines no columns at all, which shouldn't happen in practice. */
+  ingredientsCrop: Buffer | null;
+  /** Same idea as ingredientsCrop, for whichever nutrition sub-regions were actually read (including a detected swap-block second column, see correctPage2Regions). */
+  nutritionCrop: Buffer | null;
   servingCounts: number[];
   ingredients: ParsedCardIngredientRow[];
   calories: number | null;
@@ -47,12 +59,22 @@ export interface ParsedCardRecipe {
   proteinGrams: number | null;
   saltGrams: number | null;
   fiberGrams: number | null;
+  /**
+   * A second nutrition column read off a "Custom Recipe" swap block (see
+   * e.g. Bacon Leek and Mushroom Pie's optional chicken) — present only when
+   * the card actually has one (detected via a second "Per serving" header,
+   * see correctPage2Regions). Review-screen-only: there's no persisted
+   * dual-nutrition-set column on Recipe, this is just surfaced so the user
+   * can see both figures and pick the right one for what they'll actually
+   * cook.
+   */
+  nutritionWithOptionalIngredient: NutritionFields | null;
   steps: ParsedCardStep[];
   /** Fields that came back empty/ambiguous — surfaced on the review screen rather than silently dropped. */
   warnings: string[];
 }
 
-type NutritionFields = Pick<
+export type NutritionFields = Pick<
   ParsedCardRecipe,
   "calories" | "fatGrams" | "saturatedFatGrams" | "carbsGrams" | "sugarGrams" | "proteinGrams" | "saltGrams" | "fiberGrams"
 >;
@@ -71,12 +93,12 @@ function emptyNutritionFields(): NutritionFields {
 }
 
 /** A ParsedCardRecipe with its image Buffers stripped out — the JSON-safe shape persisted on PdfImportDraft.data. Images live on disk instead (see imageStorage.ts), addressed by draft id + a fixed naming convention rather than a path stored here. */
-export type DraftRecipeData = Omit<ParsedCardRecipe, "coverPhoto" | "steps"> & {
-  steps: Array<Omit<ParsedCardStep, "photo">>;
+export type DraftRecipeData = Omit<ParsedCardRecipe, "coverPhoto" | "ingredientsCrop" | "nutritionCrop" | "steps"> & {
+  steps: Array<Omit<ParsedCardStep, "photo" | "textCrop">>;
 };
 
 export function toDraftRecipeData(parsed: ParsedCardRecipe): DraftRecipeData {
-  const { coverPhoto: _coverPhoto, steps, ...rest } = parsed;
+  const { coverPhoto: _coverPhoto, ingredientsCrop: _ingredientsCrop, nutritionCrop: _nutritionCrop, steps, ...rest } = parsed;
   return {
     ...rest,
     steps: steps.map(({ heading, text }) => ({ heading, text })),
@@ -107,7 +129,7 @@ function mergeWrappedNameLines(lines: OcrLine[]): OcrLine[] {
     const looksLikeContinuation = merged.length > 0 && /^[\d\s|).]{1,6}$/.test(line.text);
     if (looksLikeContinuation) {
       const prev = merged[merged.length - 1];
-      merged[merged.length - 1] = { text: `${prev.text} ${line.text}`.trim(), y: prev.y };
+      merged[merged.length - 1] = { text: `${prev.text} ${line.text}`.trim(), y: prev.y, baseline: prev.baseline };
     } else {
       merged.push(line);
     }
@@ -311,13 +333,49 @@ async function parseIngredients(
     : parseIngredientListLayout(page, region, warnings);
 }
 
+/**
+ * Re-examines the ingredient-name column's pixels (not just its OCR'd text)
+ * for a HelloFresh "optional ingredient" callout, printed in red rather
+ * than the card's normal near-black — see colorDetect.ts and e.g. Bacon
+ * Leek and Mushroom Pie's optional chicken. Only applies to a "table"
+ * ingredients layout (the one the known swap-block cards use); duplicates a
+ * small crop+OCR call parseIngredientTableLayout already made internally,
+ * traded for not threading OcrLine data back out through
+ * ParsedCardIngredientRow just for this.
+ */
+async function flagRedHighlightedIngredients(
+  page: { png: Buffer; width: number; height: number },
+  region: IngredientsRegion,
+  parsedRows: ParsedCardIngredientRow[],
+  warnings: string[],
+): Promise<void> {
+  if (region.layout !== "table" || parsedRows.length === 0) return;
+  const nameCrop = await cropRegion(page.png, page.width, page.height, region.nameColumn);
+  const names = cleanIngredientNameLines(mergeWrappedNameLines(await recognizeLines(nameCrop)));
+  for (const line of names) {
+    if (await isReddishLine(nameCrop, line)) {
+      warnings.push(
+        `"${line.text}" looks highlighted in red on the card — likely an optional/swappable ingredient. Check whether to include it (and which nutrition column applies).`,
+      );
+    }
+  }
+}
+
+// A real per-serving meal is never this low — well below any plausible
+// reading, so a value under this is a truncated/misread digit (e.g. "504"
+// clipped to "5") rather than a genuine (if surprising) figure. Left as a
+// wrong-but-plausible "5" instead of null, this kind of miss is easy to
+// skim past on the review screen; null makes it obviously unread instead.
+const MIN_PLAUSIBLE_CALORIES = 50;
+
 function parseEnergyKcal(value: string): number | null {
   // Card shows "kJ/kcal" as e.g. "3125/747" — kcal is the second number.
   // OCR doesn't reliably render the "/" itself (sometimes "[", sometimes a
   // plain space), so split on any run of digits rather than requiring it.
   const numbers = [...value.matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
   if (numbers.length === 0) return null;
-  return Math.round(numbers[numbers.length - 1]);
+  const kcal = Math.round(numbers[numbers.length - 1]);
+  return kcal >= MIN_PLAUSIBLE_CALORIES ? kcal : null;
 }
 
 function parseGramsCell(value: string): number | null {
@@ -339,36 +397,127 @@ const NUTRIENT_FIELDS = [
   { key: "fiberGrams", pattern: /^fib(re|er)/i },
 ] as const;
 
-async function parseNutritionTable(
+/**
+ * Drops a value column's unlabeled kJ row. Most layouts print one combined
+ * "2487/504"-style cell for Energy that reads back as a single line, but at
+ * least one (confirmed against a real scan of the single-serving template)
+ * gives kJ its own full table row alongside the kcal row, sharing one
+ * "Energy" label between the two rather than the label repeating — so it
+ * OCRs as an extra, unlabeled value with no row of its own to pair against,
+ * and left in place shifts every later row's pairing by one. A per-serving
+ * reading this large can only be that kJ figure (real gram amounts, and
+ * kcal itself, are always well under 1000), so it's simply discarded —
+ * unlike the label side, there's no reliable way here to tell which of the
+ * two rows is the "real" one to keep, so this doesn't try to rescue the
+ * kcal figure from it, only to stop it from corrupting the rows after it.
+ */
+function dropUnlabeledEnergyRow(values: OcrLine[]): OcrLine[] {
+  return values.filter((l) => {
+    const numbers = [...l.text.matchAll(/\d+(?:\.\d+)?/g)];
+    // A line with two or more numbers is a combined "2487/504"-style
+    // kJ/kcal cell, not the lone extra row this is meant to catch —
+    // parseEnergyKcal already knows how to pick the right one out of those.
+    if (numbers.length > 1) return true;
+    const lone = Number(numbers[0]?.[0] ?? NaN);
+    return !(lone > 999);
+  });
+}
+
+/** OCRs a value-column crop and keeps only lines that look like a real cell — every real row starts with a digit, which conveniently also drops a sliver of "Per serving" header text the crop often catches above the numeric rows. */
+async function ocrNutritionValues(
   page: { png: Buffer; width: number; height: number },
-  region: Extract<NutritionRegion, { layout: "table" }>,
-  warnings: string[],
+  valueColumn: FractionalRegion,
+): Promise<OcrLine[]> {
+  const valueCrop = await cropRegion(page.png, page.width, page.height, valueColumn);
+  const lines = (await recognizeLines(valueCrop)).filter((l) => /^\d/.test(l.text));
+  return dropUnlabeledEnergyRow(lines);
+}
+
+// How much extra headroom to retry with when a value column's top row looks
+// clipped (see readNutritionValueColumn) — a fraction of page height small
+// enough to rescue a row sitting just inside the crop boundary without
+// reaching far enough up to catch an unrelated line from the row above (on
+// a real scan, consecutive nutrition rows sit roughly 0.017 apart).
+const CLIPPED_ROW_RETRY_MARGIN = 0.008;
+
+/** Reads one value column and pairs each row against already-OCR'd labels — split out from parseNutritionTable so a "Custom Recipe" swap block's second value column (see correctPage2Regions) can be read against the same label set without re-OCRing it. */
+async function readNutritionValueColumn(
+  page: { png: Buffer; width: number; height: number },
+  labels: OcrLine[],
+  valueColumn: FractionalRegion,
 ): Promise<NutritionFields> {
-  const labelCrop = await cropRegion(page.png, page.width, page.height, region.labelColumn);
-  const valueCrop = await cropRegion(page.png, page.width, page.height, region.valueColumn);
-  const labels = await recognizeLines(labelCrop);
-  // The value column sits directly under the "Per serving" header, so its
-  // crop often catches a sliver of that header text above the real numeric
-  // rows (e.g. "or serving") — every real row starts with a digit, so
-  // filtering on that drops the header fragment regardless of exactly
-  // where the crop's top edge falls.
-  const values = (await recognizeLines(valueCrop)).filter((l) => /^\d/.test(l.text));
+  let values = await ocrNutritionValues(page, valueColumn);
+  // Fewer value rows than label rows is the signature of a clipped top row
+  // (confirmed against a real scan: the energy figure sat a handful of
+  // pixels inside the crop and didn't OCR at all, while the label crop's
+  // "Energy" text — same top edge — read fine) rather than a genuinely
+  // blank cell, which shows up as a *value* present but failing the
+  // matchByNearestY distance instead. Only keep the retry's result if it
+  // actually found more rows — otherwise the original crop was already
+  // fine and widening it just risks pulling in a stray line from above.
+  if (values.length < labels.length) {
+    const grown = {
+      ...valueColumn,
+      top: Math.max(0, valueColumn.top - CLIPPED_ROW_RETRY_MARGIN),
+      height: valueColumn.height + CLIPPED_ROW_RETRY_MARGIN,
+    };
+    const retried = await ocrNutritionValues(page, grown);
+    if (retried.length > values.length) values = retried;
+  }
   const matchedValues = matchByNearestY(labels, values);
 
   const result = emptyNutritionFields();
   labels.forEach((label, i) => {
     const value = matchedValues[i]?.text;
     if (!value) return;
-    if (/^energy/i.test(label.text)) {
+    // Energy is always the table's first row on every known layout, and its
+    // "(kJ/kcal)" suffix reads noticeably worse than the other rows' plain
+    // "(g)" — seen against a real scan reading it as unrecognizable noise
+    // ("CHRErgYy \KJ/KLdl)") while every other row read cleanly. Row 0 not
+    // matching any other known nutrient is as good a signal as the text
+    // itself that this was meant to be the energy row.
+    const looksLikeEnergyRow = /^energy/i.test(label.text) || (i === 0 && !NUTRIENT_FIELDS.some((f) => f.pattern.test(label.text)));
+    if (looksLikeEnergyRow) {
       result.calories = parseEnergyKcal(value);
       return;
     }
     const field = NUTRIENT_FIELDS.find((f) => f.pattern.test(label.text));
     if (field) result[field.key] = parseGramsCell(value);
   });
-
-  if (result.calories == null) warnings.push("Couldn't read calories from the nutrition table.");
   return result;
+}
+
+async function parseNutritionTable(
+  page: { png: Buffer; width: number; height: number },
+  region: Extract<NutritionRegion, { layout: "table" }>,
+  warnings: string[],
+  swapBlockValueColumn?: FractionalRegion | null,
+): Promise<{ base: NutritionFields; withOptionalIngredient: NutritionFields | null }> {
+  const labelCrop = await cropRegion(page.png, page.width, page.height, region.labelColumn);
+  // A real nutrient label always has a real word in it outside of its unit
+  // ("Energy", "Fat (g)", ...) — fewer than 3 letters once any "(...)" unit
+  // is stripped out is noise (a stray mark, a fragment of a neighbouring
+  // column bleeding into the crop, or — confirmed against a real scan — a
+  // "(kcal)" unit that OCR occasionally splits onto its own line, separate
+  // from "Energy") rather than a genuine row. Left in, it consumes one of
+  // the real value rows via matchByNearestY and cascade-misaligns every row
+  // after it.
+  const labels = (await recognizeLines(labelCrop)).filter(
+    (l) => (l.text.replace(/\([^)]*\)/g, "").match(/[a-zA-Z]/g) ?? []).length >= 3,
+  );
+
+  const base = await readNutritionValueColumn(page, labels, region.valueColumn);
+  if (base.calories == null) warnings.push("Couldn't read calories from the nutrition table.");
+
+  let withOptionalIngredient: NutritionFields | null = null;
+  if (swapBlockValueColumn) {
+    withOptionalIngredient = await readNutritionValueColumn(page, labels, swapBlockValueColumn);
+    warnings.push(
+      "This card has an extra nutrition column, likely for a swappable/optional ingredient (see the ingredient warnings above) — both readings are shown below, double-check which applies.",
+    );
+  }
+
+  return { base, withOptionalIngredient };
 }
 
 const LABELED_NUTRIENT_PATTERNS: { key: keyof NutritionFields; pattern: RegExp }[] = [
@@ -422,14 +571,15 @@ async function parseNutrition(
   page: { png: Buffer; width: number; height: number },
   region: NutritionRegion,
   warnings: string[],
-): Promise<NutritionFields> {
+  swapBlockValueColumn?: FractionalRegion | null,
+): Promise<{ base: NutritionFields; withOptionalIngredient: NutritionFields | null }> {
   switch (region.layout) {
     case "table":
-      return parseNutritionTable(page, region, warnings);
+      return parseNutritionTable(page, region, warnings, swapBlockValueColumn);
     case "labeled-text":
-      return parseNutritionLabeledText(page, region, warnings);
+      return { base: await parseNutritionLabeledText(page, region, warnings), withOptionalIngredient: null };
     case "positional":
-      return parseNutritionPositional(page, region, warnings);
+      return { base: await parseNutritionPositional(page, region, warnings), withOptionalIngredient: null };
   }
 }
 
@@ -451,6 +601,20 @@ async function parseStepsGrid(
     const textCrop = await cropRegion(page.png, page.width, page.height, stepRegion.text);
     const lines = linesOf(await recognizeText(textCrop));
 
+    // A red-highlighted step (e.g. the extra chicken-cooking step on Bacon
+    // Leek and Mushroom Pie's optional-ingredient card) needs line-level
+    // bboxes recognizeText's flat string doesn't carry, hence the separate
+    // recognizeLines call here on top of the recognizeText one above.
+    const ocrLines = await recognizeLines(textCrop);
+    for (const line of ocrLines) {
+      if (await isReddishLine(textCrop, line)) {
+        warnings.push(
+          `Step ${i + 1} looks like it includes red-highlighted text (an optional/swappable-ingredient variant?) — check whether it applies to what you're cooking.`,
+        );
+        break;
+      }
+    }
+
     // Punctuation after the number is optional — some cards print "1.
     // Get Prepped", others just "1 PREP THE INGREDIENTS" with a bare space.
     const headingMatch = lines[0] && /^\d+[.)]?\s+(.+)$/.exec(lines[0]);
@@ -464,7 +628,7 @@ async function parseStepsGrid(
     const text = (headingMatch || capsHeading ? lines.slice(1) : lines).join(" ");
 
     if (!text) warnings.push(`Step ${i + 1}: couldn't read any instruction text.`);
-    steps.push({ heading, text, photo });
+    steps.push({ heading, text, photo, textCrop });
   }
   return steps;
 }
@@ -507,14 +671,14 @@ function splitFlowingSteps(text: string, sequence: StepSequence): ParsedCardStep
 
   if (accepted.length === 0) {
     const trimmed = normalized.replace(/\s+/g, " ").trim();
-    return trimmed ? [{ heading: null, text: trimmed, photo: null }] : [];
+    return trimmed ? [{ heading: null, text: trimmed, photo: null, textCrop: null }] : [];
   }
   const steps: ParsedCardStep[] = [];
   for (let i = 0; i < accepted.length; i++) {
     const start = accepted[i].index + accepted[i].matchLength;
     const end = i + 1 < accepted.length ? accepted[i + 1].index : normalized.length;
     const stepText = normalized.slice(start, end).replace(/\s+/g, " ").trim();
-    if (stepText) steps.push({ heading: null, text: stepText, photo: null });
+    if (stepText) steps.push({ heading: null, text: stepText, photo: null, textCrop: null });
   }
   return steps;
 }
@@ -571,13 +735,105 @@ async function detectTemplate(page1: {
   return null;
 }
 
+/**
+ * Corrects a template's page-2 ingredients/nutrition regions against where
+ * their calibration anchors (see RegionAnchor in regions.ts) actually land
+ * on this scan, via one shared full-page OCR pass — layout drift (a shifted
+ * print run, or a card variant like the Bacon Pie "Custom Recipe" swap
+ * block) moves both anchors and the content they label together, so a small
+ * per-anchor offset keeps the fixed-fraction crops aligned without needing a
+ * bespoke template per variant. Falls back to the template's own
+ * uncorrected regions wherever a template defines no anchor for that
+ * section, or the anchor's text isn't found on this particular scan.
+ */
+async function correctPage2Regions(
+  page2: RasterPage,
+  template: CardTemplate,
+): Promise<{
+  ingredients: IngredientsRegion;
+  nutrition: NutritionRegion;
+  nutritionSwapBlockValueColumn: FractionalRegion | null;
+}> {
+  const anchors = template.page2.anchors;
+  if (!anchors) {
+    return { ingredients: template.page2.ingredients, nutrition: template.page2.nutrition, nutritionSwapBlockValueColumn: null };
+  }
+
+  const lines = await recognizeLines(page2.png);
+
+  let ingredients = template.page2.ingredients;
+  if (anchors.ingredients) {
+    const found = findAnchor(lines, anchors.ingredients.label, page2.width, page2.height, {
+      left: anchors.ingredients.expectedLeft,
+      top: anchors.ingredients.expectedTop,
+    });
+    if (found) {
+      ingredients = shiftIngredientsRegion(
+        ingredients,
+        found.left - anchors.ingredients.expectedLeft,
+        found.top - anchors.ingredients.expectedTop,
+      );
+    }
+  }
+
+  let nutrition = template.page2.nutrition;
+  let nutritionSwapBlockValueColumn: FractionalRegion | null = null;
+  if (anchors.nutrition) {
+    const found = findAnchor(lines, anchors.nutrition.label, page2.width, page2.height, {
+      left: anchors.nutrition.expectedLeft,
+      top: anchors.nutrition.expectedTop,
+    });
+    const nutritionTop = found ? found.top : anchors.nutrition.expectedTop;
+    if (found) {
+      nutrition = shiftNutritionRegion(nutrition, found.left - anchors.nutrition.expectedLeft, found.top - anchors.nutrition.expectedTop);
+    }
+
+    // The section-title anchor only corrects for *vertical* drift reliably —
+    // a swap block doesn't just shift the value column sideways, it
+    // compresses two "Per serving / Per 100g" header pairs into roughly the
+    // same width a plain card gives one, so a fixed horizontal offset from
+    // the title can't locate it. Read the real column positions directly
+    // off this scan's own header row instead (see findColumnHeaderPositions).
+    if (nutrition.layout === "table") {
+      const columnStarts = findColumnHeaderPositions(lines, nutritionTop, page2.width, page2.height);
+      if (columnStarts.length >= 2) {
+        // A swap block's 4 columns sit much closer together than the plain
+        // layout's single value column the labelColumn's width was
+        // calibrated against — left uncorrected, that width reaches past
+        // the (now much closer) first value column and pulls its digits
+        // into the label OCR pass too, scrambling the label/value row
+        // pairing. Clamp it to stop just short of whatever column position
+        // was actually detected.
+        const labelColumn = {
+          ...nutrition.labelColumn,
+          width: Math.min(nutrition.labelColumn.width, Math.max(0.02, columnStarts[0] - nutrition.labelColumn.left - 0.005)),
+        };
+        nutrition = { ...nutrition, labelColumn, valueColumn: { ...nutrition.valueColumn, left: columnStarts[0] } };
+        // 4 columns (not 2) is a base "Per serving/100g" pair plus a second
+        // pair for a swap block's optional ingredient — see
+        // findColumnHeaderPositions. columnStarts[2] is that second pair's
+        // "Per serving" (not "Per 100g", which this app doesn't read at all).
+        if (columnStarts.length >= 4) {
+          nutritionSwapBlockValueColumn = { ...nutrition.valueColumn, left: columnStarts[2] };
+        }
+      }
+    }
+  }
+
+  return { ingredients, nutrition, nutritionSwapBlockValueColumn };
+}
+
 /** Parses a scanned HelloFresh recipe-card PDF into structured (but unverified — always review before saving) recipe data. Only recognizes known card layouts (see regions.ts); anything else raises UnsupportedCardLayoutError. */
 export async function parseCardPdf(pdfBytes: Uint8Array): Promise<ParsedCardRecipe> {
-  const pages = await rasterizePdf(pdfBytes);
-  if (pages.length < 2) {
-    throw new UnsupportedCardLayoutError(`Expected a 2-page card PDF, got ${pages.length} page(s).`);
+  const rawPages = await rasterizePdf(pdfBytes);
+  if (rawPages.length < 2) {
+    throw new UnsupportedCardLayoutError(`Expected a 2-page card PDF, got ${rawPages.length} page(s).`);
   }
-  const [page1, page2] = pages;
+  // Straighten each page before any template logic runs — a rotated scan
+  // would otherwise throw off every fixed-fraction crop below by the same
+  // amount a skewed anchor search is meant to catch on top of it. See
+  // deskew.ts; a no-op (same page returned) for an already-upright scan.
+  const [page1, page2] = await Promise.all([deskewPage(rawPages[0]), deskewPage(rawPages[1])]);
 
   const template = await detectTemplate(page1);
   if (!template) {
@@ -598,14 +854,44 @@ export async function parseCardPdf(pdfBytes: Uint8Array): Promise<ParsedCardReci
 
   const coverPhoto = await cropRegion(page1.png, page1.width, page1.height, template.page1.coverPhoto);
 
+  const {
+    ingredients: ingredientsRegion,
+    nutrition: nutritionRegion,
+    nutritionSwapBlockValueColumn,
+  } = await correctPage2Regions(page2, template);
+
   // Sequential, not Promise.all — OCR calls share a single Tesseract worker
   // (see ocr.ts) which isn't safe to run concurrently against; parallel
   // recognize() calls were observed to corrupt each other's results.
-  const ingredients = await parseIngredients(page2, template.page2.ingredients, warnings);
-  const nutrition = await parseNutrition(page2, template.page2.nutrition, warnings);
+  const ingredients = await parseIngredients(page2, ingredientsRegion, warnings);
+  await flagRedHighlightedIngredients(page2, ingredientsRegion, ingredients, warnings);
+  const nutrition = await parseNutrition(page2, nutritionRegion, warnings, nutritionSwapBlockValueColumn);
   const steps = await parseSteps(page2, template.page2.steps, warnings);
 
   if (ingredients.length === 0) warnings.push("Couldn't read any ingredient rows.");
+
+  // Not OCR — just a plain crop, so cheap enough to do unconditionally
+  // rather than only when saveDraftImages is about to persist it. Lets the
+  // review screen show "this is exactly what OCR read" next to the fields
+  // it produced (see imageStorage.ts).
+  const ingredientsCropRegion = unionRegion(
+    ingredientsRegion.layout === "table"
+      ? [ingredientsRegion.nameColumn, ...ingredientsRegion.qtyColumns]
+      : ingredientsRegion.columns,
+  );
+  const ingredientsCrop = ingredientsCropRegion
+    ? await cropRegion(page2.png, page2.width, page2.height, ingredientsCropRegion)
+    : null;
+
+  const nutritionCropRegion = unionRegion(
+    [
+      ...(nutritionRegion.layout === "table" ? [nutritionRegion.labelColumn, nutritionRegion.valueColumn] : [nutritionRegion.block]),
+      ...(nutritionSwapBlockValueColumn ? [nutritionSwapBlockValueColumn] : []),
+    ],
+  );
+  const nutritionCrop = nutritionCropRegion
+    ? await cropRegion(page2.png, page2.width, page2.height, nutritionCropRegion)
+    : null;
 
   return {
     templateId: template.id,
@@ -613,10 +899,13 @@ export async function parseCardPdf(pdfBytes: Uint8Array): Promise<ParsedCardReci
     subtitle,
     cookMinutes,
     coverPhoto,
+    ingredientsCrop,
+    nutritionCrop,
     servingCounts: template.servingCounts,
     ingredients,
     steps,
     warnings,
-    ...nutrition,
+    ...nutrition.base,
+    nutritionWithOptionalIngredient: nutrition.withOptionalIngredient,
   };
 }

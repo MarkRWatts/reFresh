@@ -42,6 +42,23 @@ export type StepsRegion =
   | { layout: "flowing"; columns: FractionalRegion[] };
 
 /**
+ * Marks where a known piece of header text (e.g. "Nutrition") sat when a
+ * template's regions below were calibrated by eye against a reference scan.
+ * At runtime, deskew.ts's findAnchor locates that same text on the actual
+ * scan being imported and the difference between where it landed and
+ * `expectedLeft`/`expectedTop` becomes a correction offset applied to every
+ * region calibrated relative to it — see applyAnchorCorrection. This is what
+ * lets a template tolerate a shifted print layout (e.g. the "Custom Recipe"
+ * swap block on Bacon Leek and Mushroom Pie) without a fixed crop silently
+ * landing on the wrong content.
+ */
+export interface RegionAnchor {
+  label: string;
+  expectedLeft: number;
+  expectedTop: number;
+}
+
+/**
  * Named crop regions for one HelloFresh card layout generation. Calibrated
  * by eye against a rendered sample of that layout (see scripts/import-pdf.ts
  * --dump-crops) — expect to need retuning if a card's print layout shifts.
@@ -61,6 +78,8 @@ export interface CardTemplate {
     ingredients: IngredientsRegion;
     nutrition: NutritionRegion;
     steps: StepsRegion;
+    /** Optional per-section anchors used to correct ingredients/nutrition for layout drift (see RegionAnchor) — undefined for a section means "trust the fixed calibration as-is," same as before anchor correction existed. */
+    anchors?: { ingredients?: RegionAnchor; nutrition?: RegionAnchor };
   };
 }
 
@@ -87,15 +106,31 @@ export const HF_SCALING_TABLE_TEMPLATE: CardTemplate = {
       ],
     },
     // Calibrated against the plain 2-column nutrition table (Teriyaki). A
-    // "Custom Recipe" swap block (see Bacon Pie) adds extra Per-serving/
-    // Per-100g columns that squeeze into a different position — attempted
-    // to widen this to cover both and it made both worse, so this stays
-    // tuned to the more common plain layout; the swap-block variant's
-    // nutrition numbers are a known gap, left for the review screen.
+    // "Custom Recipe" swap block (see Bacon Pie) shifts this and adds an
+    // extra Per-serving/Per-100g value column — previously a known gap
+    // ("attempted to widen this and it made both worse"), now handled at
+    // runtime instead of by a fixed crop: see anchors.nutrition below and
+    // parseCardPdf.ts's swap-block detection, which locates the actual
+    // "Nutrition"/second "Per serving" header text per scan rather than
+    // trusting these numbers blindly.
     nutrition: {
       layout: "table",
       labelColumn: { left: 0, top: 0.5, width: 0.1, height: 0.15 },
       valueColumn: { left: 0.115, top: 0.5, width: 0.05, height: 0.15 },
+    },
+    // Verified against a real "Bacon Leek and Mushroom Pie" scan (the
+    // swap-block card these anchors exist for in the first place).
+    // "nutrition" anchors on the "Energy" row itself rather than the
+    // "Nutrition" section title above it — the gap between the section
+    // title and where the label/value rows actually start isn't constant
+    // (a swap-block card's extra "Typical Values"/"Per serving·100g" header
+    // lines push it down further than on a plain card), but "Energy" is
+    // always the first row directly, and (checked against the real scan)
+    // doesn't appear anywhere else on the card the way "nutrition" itself
+    // does in disclaimer small print.
+    anchors: {
+      ingredients: { label: "ingredients", expectedLeft: 0, expectedTop: 0.136 },
+      nutrition: { label: "energy", expectedLeft: 0.012, expectedTop: 0.503 },
     },
     steps: {
       layout: "grid",
@@ -237,6 +272,51 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   HF_LEGACY_PORTRAIT_TEMPLATE,
   HF_PARTNER_CARD_TEMPLATE,
 ];
+
+/** The smallest region containing every region in `regions` — used to save one representative "this is what OCR read" preview crop for a whole section made of several column sub-regions (see imageStorage.ts's ingredients.png/nutrition.png, saved so the import-review screen can show it next to the fields it produced). Null for an empty list. */
+export function unionRegion(regions: FractionalRegion[]): FractionalRegion | null {
+  if (regions.length === 0) return null;
+  const left = Math.min(...regions.map((r) => r.left));
+  const top = Math.min(...regions.map((r) => r.top));
+  const right = Math.max(...regions.map((r) => r.left + r.width));
+  const bottom = Math.max(...regions.map((r) => r.top + r.height));
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/** Shifts a region by a fractional (dx, dy) offset, clamped so it never slides off the page — used to correct a template's fixed regions against where an anchor (see RegionAnchor) actually landed on a given scan. */
+export function shiftFractionalRegion(region: FractionalRegion, dx: number, dy: number): FractionalRegion {
+  const left = Math.min(Math.max(region.left + dx, 0), Math.max(0, 1 - region.width));
+  const top = Math.min(Math.max(region.top + dy, 0), Math.max(0, 1 - region.height));
+  return { ...region, left, top };
+}
+
+/** Applies the same (dx, dy) correction to every sub-region of an ingredients layout, keeping the name/quantity columns aligned with each other. */
+export function shiftIngredientsRegion(region: IngredientsRegion, dx: number, dy: number): IngredientsRegion {
+  if (region.layout === "table") {
+    return {
+      layout: "table",
+      nameColumn: shiftFractionalRegion(region.nameColumn, dx, dy),
+      qtyColumns: region.qtyColumns.map((c) => shiftFractionalRegion(c, dx, dy)),
+    };
+  }
+  return { layout: "list", columns: region.columns.map((c) => shiftFractionalRegion(c, dx, dy)) };
+}
+
+/** Applies the same (dx, dy) correction to every sub-region of a nutrition layout, keeping the label/value columns aligned with each other. */
+export function shiftNutritionRegion(region: NutritionRegion, dx: number, dy: number): NutritionRegion {
+  switch (region.layout) {
+    case "table":
+      return {
+        layout: "table",
+        labelColumn: shiftFractionalRegion(region.labelColumn, dx, dy),
+        valueColumn: shiftFractionalRegion(region.valueColumn, dx, dy),
+      };
+    case "labeled-text":
+      return { layout: "labeled-text", block: shiftFractionalRegion(region.block, dx, dy) };
+    case "positional":
+      return { layout: "positional", block: shiftFractionalRegion(region.block, dx, dy), fields: region.fields };
+  }
+}
 
 /** Crops a fractional region out of a rasterized page (see rasterize.ts) into its own PNG buffer, ready for OCR or storage. */
 export async function cropRegion(
