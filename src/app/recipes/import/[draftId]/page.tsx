@@ -23,7 +23,7 @@ export default async function ReviewImportPage({
     await draftImageUrls(draftId, data.steps.length);
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
       <BackLink className="text-sm text-zinc-500 hover:text-zinc-700" />
 
       <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Review import</h1>
@@ -48,7 +48,7 @@ export default async function ReviewImportPage({
           <Image src={coverImageUrl} alt="Cover" fill sizes="20rem" className="object-cover" />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <TextField label="Name" name="name" defaultValue={data.name} />
           <TextField label="Subtitle" name="subtitle" defaultValue={data.subtitle ?? ""} />
           <TextField

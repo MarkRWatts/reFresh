@@ -49,3 +49,9 @@ next-env.d.ts
 
 # DB snapshots (npm run db:snapshot / db:restore) — large binary dumps
 /db-backups
+
+# Local RECIPE_IMAGES_DIR default (./storage/recipe-images) — in Docker this
+# is a named volume mount point (see docker-compose.yml), never a real repo
+# path, but running the dev server locally without RECIPE_IMAGES_DIR set
+# creates it on disk right here.
+/storage

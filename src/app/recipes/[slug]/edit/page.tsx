@@ -1,9 +1,12 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import BackLink from "@/components/BackLink";
 import SubmitButton from "@/components/SubmitButton";
 import DeleteRecipeButton from "@/components/DeleteRecipeButton";
+import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
 import { TextField, NutritionFieldsSection, StepsFieldsSection } from "@/components/RecipeEditorFields";
+import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
 import { updateRecipeFields } from "@/lib/recipes/recipeEditActions";
 import { parseRecipeSteps } from "@/lib/recipes/steps";
@@ -19,7 +22,7 @@ export default async function EditRecipePage({
   if (!recipe.isUserCreated) redirect(`/recipes/${slug}`);
 
   const recipeSteps = parseRecipeSteps(recipe.steps);
-  const steps = recipeSteps.map((s) => ({ heading: null, text: s.text }));
+  const steps = recipeSteps.map((s) => ({ heading: s.heading, text: s.text }));
   const stepImageUrls = recipeSteps.map((s) => s.imageUrl);
 
   return (
@@ -33,6 +36,28 @@ export default async function EditRecipePage({
       </p>
 
       <form action={updateRecipeFields.bind(null, recipe.id)} className="mt-6 space-y-6">
+        <div className="rounded-2xl border border-zinc-200 p-4">
+          <h2 className="text-sm font-semibold text-zinc-900">Cover photo</h2>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <div className="relative aspect-[4/3] w-40 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+              {hasUsableImage(recipe.imageUrl) ? (
+                <Image src={recipe.imageUrl} alt={recipe.name} fill sizes="10rem" className="object-cover" />
+              ) : (
+                <RecipeImagePlaceholder />
+              )}
+            </div>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-zinc-500">Replace photo</span>
+              <input
+                type="file"
+                name="coverPhoto"
+                accept="image/*"
+                className="text-sm text-zinc-600 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-zinc-700"
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="Name" name="name" defaultValue={recipe.name} />
           <TextField label="Subtitle" name="subtitle" defaultValue={recipe.subtitle ?? ""} />
@@ -67,7 +92,7 @@ export default async function EditRecipePage({
 
         <NutritionFieldsSection nutrition={recipe} />
 
-        <StepsFieldsSection steps={steps} stepImageUrls={stepImageUrls} showHeading={false} />
+        <StepsFieldsSection steps={steps} stepImageUrls={stepImageUrls} />
 
         <div className="flex items-center gap-3">
           <SubmitButton

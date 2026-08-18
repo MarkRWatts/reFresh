@@ -143,6 +143,9 @@ export default async function RecipeDetailPage({
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
+                      {step.heading && (
+                        <p className="text-sm font-semibold text-zinc-900">{step.heading}</p>
+                      )}
                       <p className="whitespace-pre-line text-sm text-zinc-700">{step.text}</p>
                       {step.imageUrl && (
                         <div className="relative mt-3 aspect-[4/3] w-full max-w-xs overflow-hidden rounded-xl bg-zinc-100">

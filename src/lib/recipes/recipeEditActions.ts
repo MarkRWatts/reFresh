@@ -8,15 +8,16 @@ import { refreshProteinType } from "./customRecipeActions";
 import { resolveIngredientId } from "./ingredientResolution";
 import { numberField, readEditedIngredients, readEditedSteps } from "./formFields";
 import { parseRecipeSteps } from "./steps";
-import { deleteRecipeImages } from "@/lib/pdfImport/imageStorage";
+import { deleteRecipeImages, saveRecipeCoverPhoto } from "@/lib/pdfImport/imageStorage";
 
 /**
- * Saves a full edit — name/cook time/nutrition/ingredients/steps — over an
- * existing custom or PDF-imported recipe. The same field-reading
- * conventions as the PDF import review form (see commitImport.ts): an
- * ingredient row is dropped by clearing its name, a step by clearing its
- * text, and a step's photo (there's no upload widget yet) just carries
- * through unchanged from whatever it already was.
+ * Saves a full edit — name/cook time/nutrition/ingredients/steps/cover
+ * photo — over an existing custom or PDF-imported recipe. The same
+ * field-reading conventions as the PDF import review form (see
+ * commitImport.ts): an ingredient row is dropped by clearing its name, a
+ * step by clearing its text, and a step's own photo (there's no per-step
+ * upload widget yet) just carries through unchanged from whatever it
+ * already was.
  */
 export async function updateRecipeFields(recipeId: string, formData: FormData): Promise<void> {
   const recipe = await prisma.recipe.findUniqueOrThrow({ where: { id: recipeId } });
@@ -28,12 +29,19 @@ export async function updateRecipeFields(recipeId: string, formData: FormData): 
 
   const existingStepImageUrls = parseRecipeSteps(recipe.steps).map((s) => s.imageUrl);
   const steps = readEditedSteps(formData, existingStepImageUrls).map((s) => ({
-    text: s.heading ? `${s.heading}\n\n${s.text}` : s.text,
+    heading: s.heading || null,
+    text: s.text,
     imageUrl: s.imageUrl,
     caption: null,
   }));
 
   const ingredients = readEditedIngredients(formData);
+
+  const coverPhoto = formData.get("coverPhoto");
+  const imageUrl =
+    coverPhoto instanceof File && coverPhoto.size > 0
+      ? await saveRecipeCoverPhoto(recipeId, Buffer.from(await coverPhoto.arrayBuffer()), coverPhoto.type)
+      : undefined;
 
   await prisma.$transaction([
     prisma.recipeIngredient.deleteMany({ where: { recipeId } }),
@@ -52,6 +60,7 @@ export async function updateRecipeFields(recipeId: string, formData: FormData): 
         saltGrams: numberField(formData, "saltGrams"),
         fiberGrams: numberField(formData, "fiberGrams"),
         steps: steps as unknown as Prisma.InputJsonValue,
+        ...(imageUrl ? { imageUrl } : {}),
       },
     }),
   ]);

@@ -175,6 +175,59 @@ export async function deleteRecipeImages(recipeId: string): Promise<void> {
   await rm(recipeDir(recipeId), { recursive: true, force: true });
 }
 
+// Deliberately doesn't re-encode an upload through sharp the way the PDF
+// pipeline's own crops are (see regions.ts) — sharp bundles its own native
+// libvips, and loading it a second time inside the same process as Next's
+// built-in image optimizer (which already runs a *different* bundled
+// libvips version to serve every `<Image>` on this page) reliably corrupted
+// the output here (`vipspng: libpng read error`) during testing. Writing
+// the upload's bytes through unchanged sidesteps that collision entirely,
+// and there's nothing to convert for either format anyway (no resizing).
+const COVER_PHOTO_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+};
+
+/** Content-Type for a recipe image file, keyed off its extension — see COVER_PHOTO_EXTENSIONS and the route handler, which used to just hardcode image/png back when every file here really was one (always sharp-encoded PNGs from the PDF pipeline). A user-uploaded cover photo can now be any of a few common formats, so this needs to actually vary. */
+export function recipeImageContentType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const entry = Object.entries(COVER_PHOTO_EXTENSIONS).find(([, e]) => e === ext);
+  return entry?.[0] ?? "image/png";
+}
+
+/**
+ * Saves a user-uploaded cover photo, replacing whatever the recipe's
+ * current one is (including any earlier upload in a different format —
+ * see COVER_PHOTO_EXTENSIONS). Returns the URL to store in
+ * Recipe.imageUrl. Written under a fresh, uniquely-named file (rather than
+ * overwriting a fixed `cover.png` in place) so the URL itself changes on
+ * every upload — the route handler serves these with a one-year immutable
+ * Cache-Control header (see route.ts), so a same-URL overwrite would leave
+ * browsers/CDNs serving the old photo indefinitely. (A `?v=` query-string
+ * cache-buster was tried first but Next's <Image> now rejects local image
+ * URLs with a query string unless explicitly allowlisted — a fresh
+ * filename avoids needing that config at all.)
+ */
+export async function saveRecipeCoverPhoto(recipeId: string, imageBytes: Buffer, mimeType: string): Promise<string> {
+  const ext = COVER_PHOTO_EXTENSIONS[mimeType];
+  if (!ext) throw new Error(`Unsupported image type: ${mimeType}`);
+
+  const dir = recipeDir(recipeId);
+  await mkdir(dir, { recursive: true });
+
+  const existing = await readdir(dir).catch(() => [] as string[]);
+  await Promise.all(
+    existing.filter((f) => f.startsWith("cover.") || f.startsWith("cover-")).map((f) => rm(path.join(dir, f))),
+  );
+
+  const filename = `cover-${Date.now()}.${ext}`;
+  await writeFile(path.join(dir, filename), imageBytes);
+  return recipeImageUrl(recipeId, filename);
+}
+
 /** Resolves a URL path (as served by the route handler, e.g. "_drafts/<id>/cover.png") to its file on disk, rejecting anything that would escape RECIPE_IMAGES_DIR. */
 export function resolveRecipeImagePath(segments: string[]): string | null {
   if (segments.some((s) => s.includes("..") || s.includes("/") || s.includes("\\"))) return null;

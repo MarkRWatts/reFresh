@@ -26,12 +26,12 @@ export function TextField({
   );
 }
 
-/** The exact crop OCR read a field from, shown alongside it so a misread is easy to spot at a glance — see imageStorage.ts's ingredients.png/nutrition.png/step-N-text.png. Renders nothing when there's no crop to show (e.g. editing an already-committed recipe, where these crops don't survive past the import draft — see promoteDraftImages). */
+/** The exact crop OCR read a field from, shown alongside it so a misread is easy to spot at a glance — see imageStorage.ts's ingredients.png/nutrition.png/step-N-text.png. Sized tall and unconstrained in width (these crops are often narrow-but-tall column strips, e.g. a whole ingredients table, not wide-short banners — width alone doesn't make small print readable) so it's actually legible on a wide screen rather than a postage stamp. Renders nothing when there's no crop to show (e.g. editing an already-committed recipe, where these crops don't survive past the import draft — see promoteDraftImages). */
 export function SourceCropPreview({ src, alt }: { src: string | null | undefined; alt: string }) {
   if (!src) return null;
   return (
-    <div className="relative mb-2 h-16 w-full max-w-md overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
-      <Image src={src} alt={alt} fill sizes="28rem" className="object-contain" />
+    <div className="relative mb-2 h-64 w-full overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 sm:h-80">
+      <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 60rem, 100vw" className="object-contain" />
     </div>
   );
 }
@@ -117,17 +117,15 @@ export interface EditableStep {
   text: string;
 }
 
-/** The steps list, shared between the PDF import review screen and the recipe editor. Each step's own photo (if any) is shown but not replaceable — there's no upload widget yet (see edit/page.tsx), so a step's image just carries through unchanged. `showHeading` is off for an already-committed recipe: its steps were saved as one combined text blob (see commitImport.ts), with no heading tracked separately to re-populate a heading field from. */
+/** The steps list, shared between the PDF import review screen and the recipe editor. Each step's own photo (if any) is shown but not replaceable — there's no upload widget yet, so a step's image just carries through unchanged. Heading and instructions are tracked as separate fields all the way through (see steps.ts's RecipeStep), so both are always editable here. */
 export function StepsFieldsSection({
   steps,
   stepImageUrls,
   stepTextImageUrls,
-  showHeading = true,
 }: {
   steps: EditableStep[];
   stepImageUrls?: (string | null)[];
   stepTextImageUrls?: (string | null)[];
-  showHeading?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 p-4">
@@ -145,7 +143,7 @@ export function StepsFieldsSection({
                 </div>
               )}
               <div className="min-w-0 flex-1 space-y-2">
-                {showHeading && <TextField label="Heading" name="stepHeading" defaultValue={step.heading ?? ""} />}
+                <TextField label="Heading" name="stepHeading" defaultValue={step.heading ?? ""} />
                 <SourceCropPreview src={textCropUrl} alt={`Step ${i + 1} text, as scanned`} />
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-zinc-500">Instructions</span>
