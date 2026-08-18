@@ -1,4 +1,4 @@
-import { createWorker, type Worker } from "tesseract.js";
+import { createWorker, PSM, type Worker } from "tesseract.js";
 
 let workerPromise: Promise<Worker> | null = null;
 
@@ -13,9 +13,22 @@ function getWorker(): Promise<Worker> {
   return workerPromise;
 }
 
-/** Runs OCR on an image buffer (typically a cropped region of a rasterized page — see regions.ts) and returns the recognized plain text. */
+/**
+ * Runs OCR on an image buffer (typically a cropped region of a rasterized
+ * page — see regions.ts) and returns the recognized plain text.
+ *
+ * Explicitly sets SPARSE_TEXT rather than relying on the engine's default —
+ * recognizeLines (below) changes this same shared worker's mode, so every
+ * call needs to set the mode it actually wants rather than assume nothing
+ * else has touched it. SPARSE_TEXT was picked over the seemingly-obvious
+ * AUTO after AUTO turned out to return nothing at all for a small, sparse
+ * crop (a time badge next to an icon) that worked fine before any of this
+ * was explicit — tested side by side against multi-line prose crops
+ * (titles, step paragraphs) too, where it reads identically to AUTO.
+ */
 export async function recognizeText(imageBuffer: Buffer): Promise<string> {
   const worker = await getWorker();
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
   const { data } = await worker.recognize(imageBuffer);
   return data.text;
 }
@@ -26,9 +39,10 @@ export interface OcrLine {
   y: number;
 }
 
-/** Like recognizeText, but returns each line with its vertical position instead of one flattened string. */
+/** Like recognizeText, but returns each line with its vertical position instead of one flattened string. Used for narrow table-cell crops (ingredient names/quantities, nutrition labels/values) — SPARSE_TEXT suits a stack of short, disconnected lines far better than the default full-page-layout assumption, which was misreading digits as letters ("1" as "I") more often than not. */
 export async function recognizeLines(imageBuffer: Buffer): Promise<OcrLine[]> {
   const worker = await getWorker();
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
   const { data } = await worker.recognize(imageBuffer, {}, { blocks: true });
   const lines: OcrLine[] = [];
   for (const block of data.blocks ?? []) {

@@ -139,15 +139,21 @@ export const HF_SINGLE_SERVING_TEMPLATE: CardTemplate = {
       labelColumn: { left: 0.752, top: 0.341, width: 0.1, height: 0.133 },
       valueColumn: { left: 0.855, top: 0.341, width: 0.045, height: 0.133 },
     },
+    // Columns are genuinely 3 separate ~0.23-wide columns with real gaps
+    // between them (0-0.2375, 0.2525-0.4875, 0.505-0.735) — NOT one
+    // contiguous 0.86-wide strip evenly split into thirds. The previous,
+    // wrong version's third column ran out to 0.86 and bled straight into
+    // the ingredients panel (which starts at ~0.75), and by extension the
+    // first two columns' text crops bled into whichever column came next.
     steps: {
       layout: "grid",
       steps: [
-        { photo: { left: 0, top: 0.023, width: 0.2867, height: 0.22 }, text: { left: 0, top: 0.25, width: 0.2867, height: 0.22 } },
-        { photo: { left: 0.2867, top: 0.023, width: 0.2867, height: 0.22 }, text: { left: 0.2867, top: 0.25, width: 0.2867, height: 0.22 } },
-        { photo: { left: 0.5733, top: 0.023, width: 0.2867, height: 0.22 }, text: { left: 0.5733, top: 0.25, width: 0.2867, height: 0.22 } },
-        { photo: { left: 0, top: 0.535, width: 0.2867, height: 0.226 }, text: { left: 0, top: 0.767, width: 0.2867, height: 0.23 } },
-        { photo: { left: 0.2867, top: 0.535, width: 0.2867, height: 0.226 }, text: { left: 0.2867, top: 0.767, width: 0.2867, height: 0.23 } },
-        { photo: { left: 0.5733, top: 0.535, width: 0.2867, height: 0.226 }, text: { left: 0.5733, top: 0.767, width: 0.2867, height: 0.23 } },
+        { photo: { left: 0, top: 0.093, width: 0.2375, height: 0.174 }, text: { left: 0, top: 0.273, width: 0.2375, height: 0.18 } },
+        { photo: { left: 0.2525, top: 0.093, width: 0.235, height: 0.174 }, text: { left: 0.2525, top: 0.273, width: 0.235, height: 0.18 } },
+        { photo: { left: 0.505, top: 0.093, width: 0.23, height: 0.174 }, text: { left: 0.505, top: 0.273, width: 0.23, height: 0.18 } },
+        { photo: { left: 0, top: 0.531, width: 0.2375, height: 0.17 }, text: { left: 0, top: 0.707, width: 0.2375, height: 0.206 } },
+        { photo: { left: 0.2525, top: 0.531, width: 0.235, height: 0.17 }, text: { left: 0.2525, top: 0.707, width: 0.235, height: 0.206 } },
+        { photo: { left: 0.505, top: 0.531, width: 0.23, height: 0.17 }, text: { left: 0.505, top: 0.707, width: 0.23, height: 0.206 } },
       ],
     },
   },

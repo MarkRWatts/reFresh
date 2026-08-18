@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "img.hellofresh.com" }],
   },
   devIndicators: false,
+  experimental: {
+    // Server Actions default to a 1MB request body limit — scanned recipe
+    // card PDFs (src/lib/pdfImport) routinely run 7-10MB+, so the default
+    // rejects every upload with a 413 before parseCardPdf ever runs.
+    serverActions: { bodySizeLimit: "20mb" },
+  },
   // These ship native binaries (@napi-rs/canvas, sharp) or dynamically load
   // worker/wasm files at runtime (pdfjs-dist, tesseract.js) — bundling them
   // confuses Turbopack's build trace, so they're loaded via plain require()

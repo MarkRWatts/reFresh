@@ -224,9 +224,25 @@ function stripBulletNoise(line: string): string {
     .trim();
 }
 
+// The "½" glyph is small enough at print size that Tesseract's English
+// model very rarely reads it as itself — but it's consistently misread as
+// "Ya" (seen across several different cards/crops, not a one-off), unlike
+// the *other* common failure mode of reading it as some unrelated plain
+// digit. A plain-digit misread ("2" instead of "½") is indistinguishable
+// from a genuine "2" and isn't safe to "fix" — but "Ya" is never a real
+// quantity token, so correcting that one specific, repeatable pattern is
+// safe where guessing at digits wouldn't be.
+function fixFractionMisreads(token: string): string {
+  return token.replace(/^Ya$/i, "½");
+}
+
 function parseQuantityCell(cellText: string | null): ParsedCardQuantity {
   if (!cellText) return { quantity: null, unit: null, rawText: "" };
-  const { quantity, unit } = parseIngredientLine(`${insertDigitUnitSpace(cellText)} placeholder`);
+  const normalized = cellText
+    .split(/\s+/)
+    .map(fixFractionMisreads)
+    .join(" ");
+  const { quantity, unit } = parseIngredientLine(`${insertDigitUnitSpace(normalized)} placeholder`);
   return { quantity, unit, rawText: cellText };
 }
 
@@ -417,6 +433,11 @@ async function parseNutrition(
   }
 }
 
+function isAllCapsHeading(line: string): boolean {
+  const letters = line.replace(/[^a-zA-Z]/g, "");
+  return letters.length >= 3 && letters === letters.toUpperCase();
+}
+
 async function parseStepsGrid(
   page: { png: Buffer; width: number; height: number },
   region: Extract<StepsRegion, { layout: "grid" }>,
@@ -430,9 +451,17 @@ async function parseStepsGrid(
     const textCrop = await cropRegion(page.png, page.width, page.height, stepRegion.text);
     const lines = linesOf(await recognizeText(textCrop));
 
-    const headingMatch = lines[0] && /^\d+[.)]\s*(.+)$/.exec(lines[0]);
-    const heading = headingMatch ? headingMatch[1] : null;
-    const text = (headingMatch ? lines.slice(1) : lines).join(" ");
+    // Punctuation after the number is optional — some cards print "1.
+    // Get Prepped", others just "1 PREP THE INGREDIENTS" with a bare space.
+    const headingMatch = lines[0] && /^\d+[.)]?\s+(.+)$/.exec(lines[0]);
+    // Other cards number each step with a large drop-cap numeral rendered as
+    // its own graphic rather than text — OCR never sees a digit at all, just
+    // the all-caps heading words that sit beside/below it (e.g. "PREP THE
+    // INGREDIENTS"), distinguishable from the lowercase instruction prose
+    // that follows.
+    const capsHeading = !headingMatch && lines[0] && isAllCapsHeading(lines[0]) ? lines[0] : null;
+    const heading = headingMatch ? headingMatch[1] : capsHeading;
+    const text = (headingMatch || capsHeading ? lines.slice(1) : lines).join(" ");
 
     if (!text) warnings.push(`Step ${i + 1}: couldn't read any instruction text.`);
     steps.push({ heading, text, photo });
