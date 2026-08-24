@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -48,7 +49,7 @@ export default function PlanDrawer({
                   className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
                   aria-label="Close"
                 >
-                  ✕
+                  <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-4">{children}</div>

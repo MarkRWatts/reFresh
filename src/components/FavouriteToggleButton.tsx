@@ -1,4 +1,4 @@
-import HeartIcon from "@/components/icons/HeartIcon";
+import { Heart } from "lucide-react";
 import { toggleFavourite } from "@/lib/favourites/actions";
 
 /** A plain server-rendered form + button — no client JS needed for a simple toggle. */
@@ -23,7 +23,7 @@ export default function FavouriteToggleButton({
               : "border-white/70 bg-white/80 text-zinc-500 hover:text-pink-500"
           }`}
         >
-          <HeartIcon filled={isFavourite} className="h-4 w-4" />
+          <Heart className="h-4 w-4" fill={isFavourite ? "currentColor" : "none"} />
         </button>
       </form>
     );
@@ -40,7 +40,7 @@ export default function FavouriteToggleButton({
             : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400"
         }`}
       >
-        <HeartIcon filled={isFavourite} className="h-4 w-4" />
+        <Heart className="h-4 w-4" fill={isFavourite ? "currentColor" : "none"} />
         {isFavourite ? "Favourited" : "Add to favourites"}
       </button>
     </form>

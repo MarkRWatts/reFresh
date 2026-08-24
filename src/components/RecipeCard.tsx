@@ -1,3 +1,4 @@
+import { FileText, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import RecipeImagePlaceholder from "@/components/RecipeImagePlaceholder";
@@ -10,7 +11,7 @@ import type { RecipeSummary } from "@/lib/recipes/queries";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${className}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${className}`}>
       {children}
     </span>
   );
@@ -60,7 +61,9 @@ export default function RecipeCard({
 
         <div className="mt-auto flex flex-wrap gap-1.5">
           {recipe.isPdfImport && (
-            <Badge className="border-sky-200 bg-sky-50 text-sky-700">📄 Imported</Badge>
+            <Badge className="border-sky-200 bg-sky-50 text-sky-700">
+              <FileText className="h-3 w-3" /> Imported
+            </Badge>
           )}
           {recipe.isUserCreated && !recipe.isPdfImport && (
             <Badge className="border-violet-200 bg-violet-50 text-violet-700">My recipe</Badge>
@@ -80,7 +83,7 @@ export default function RecipeCard({
           )}
           {recipe.ratingValue != null && (
             <Badge className="border-amber-200 bg-amber-50 text-amber-700">
-              ★ {recipe.ratingValue.toFixed(1)}
+              <Star className="h-3 w-3 fill-current" /> {recipe.ratingValue.toFixed(1)}
             </Badge>
           )}
         </div>

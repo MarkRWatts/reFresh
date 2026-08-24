@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Clipboard } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -27,9 +28,19 @@ export default function CopyListButton({ text, label = "Copy list" }: { text: st
     <button
       type="button"
       onClick={handleCopy}
-      className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+      className="flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
     >
-      {status === "copied" ? "✓ Copied" : status === "failed" ? "Couldn't copy" : `📋 ${label}`}
+      {status === "copied" ? (
+        <>
+          <Check className="h-4 w-4" /> Copied
+        </>
+      ) : status === "failed" ? (
+        "Couldn't copy"
+      ) : (
+        <>
+          <Clipboard className="h-4 w-4" /> {label}
+        </>
+      )}
     </button>
   );
 }

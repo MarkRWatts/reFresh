@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { ProteinType } from "@/generated/prisma/client";
-import HeartIcon from "@/components/icons/HeartIcon";
+import { ChevronDown, ChevronUp, EyeOff, FileText, Heart } from "lucide-react";
 import {
   CALORIE_PRESETS,
   COOK_TIME_PRESETS,
@@ -16,7 +16,7 @@ import { buildFilterQueryString, type ParsedFilters } from "@/lib/recipes/search
 
 function pillClasses(active: boolean): string {
   return [
-    "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
     active
       ? "border-zinc-900 bg-zinc-900 text-white"
       : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400",
@@ -168,7 +168,7 @@ export default function FilterBar({
                 {activeFilterCount}
               </span>
             )}
-            <span className="ml-1">{mobileFiltersOpen ? "▲" : "▼"}</span>
+            {mobileFiltersOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
 
           {/*
@@ -186,7 +186,7 @@ export default function FilterBar({
               onClick={toggleFavouritesOnly}
               className={favouritesPillClasses(filters.favouritesOnly)}
             >
-              <HeartIcon filled={filters.favouritesOnly} className="h-4 w-4" />
+              <Heart className="h-4 w-4" fill={filters.favouritesOnly ? "currentColor" : "none"} />
               Favourites
             </button>
 
@@ -195,7 +195,8 @@ export default function FilterBar({
               onClick={toggleImportedOnly}
               className={importedPillClasses(filters.importedOnly)}
             >
-              📄 Imported
+              <FileText className="h-4 w-4" />
+              Imported
             </button>
 
             <button
@@ -204,7 +205,8 @@ export default function FilterBar({
               title="Recipes you've hidden — the only place to find and unhide one"
               className={pillClasses(filters.hiddenOnly)}
             >
-              🙈 Hidden
+              <EyeOff className="h-4 w-4" />
+              Hidden
             </button>
 
             {PROTEIN_TYPE_OPTIONS.map((option) => (

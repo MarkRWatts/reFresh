@@ -1,3 +1,4 @@
+import { ExternalLink, FileText, GitFork, Pencil, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -17,7 +18,7 @@ import { cloneRecipe } from "@/lib/recipes/customRecipeActions";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium ${className}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm font-medium ${className}`}>
       {children}
     </span>
   );
@@ -65,7 +66,9 @@ export default async function RecipeDetailPage({
 
           <div className="mt-4 flex flex-wrap gap-2">
             {recipe.isPdfImport && (
-              <Badge className="border-sky-200 bg-sky-50 text-sky-700">📄 From a card scan</Badge>
+              <Badge className="border-sky-200 bg-sky-50 text-sky-700">
+                <FileText className="h-3.5 w-3.5" /> From a card scan
+              </Badge>
             )}
             {recipe.isUserCreated && !recipe.isPdfImport && (
               <Badge className="border-violet-200 bg-violet-50 text-violet-700">My recipe</Badge>
@@ -93,7 +96,7 @@ export default async function RecipeDetailPage({
             )}
             {recipe.ratingValue != null && (
               <Badge className="border-amber-200 bg-amber-50 text-amber-700">
-                ★ {recipe.ratingValue.toFixed(1)}
+                <Star className="h-3.5 w-3.5 fill-current" /> {recipe.ratingValue.toFixed(1)}
                 {recipe.ratingCount != null && ` (${recipe.ratingCount})`}
               </Badge>
             )}
@@ -106,17 +109,17 @@ export default async function RecipeDetailPage({
             {recipe.isUserCreated ? (
               <Link
                 href={`/recipes/${recipe.slug}/edit`}
-                className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+                className="flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
               >
-                ✎ Edit recipe
+                <Pencil className="h-4 w-4" /> Edit recipe
               </Link>
             ) : (
               <form action={cloneRecipe.bind(null, recipe.id)}>
                 <button
                   type="submit"
-                  className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+                  className="flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
                 >
-                  ⑂ Clone &amp; customize
+                  <GitFork className="h-4 w-4" /> Clone &amp; customize
                 </button>
               </form>
             )}
@@ -131,7 +134,7 @@ export default async function RecipeDetailPage({
               rel="noopener noreferrer"
               className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800 hover:underline print:hidden"
             >
-              View original recipe on HelloFresh ↗
+              View original recipe on HelloFresh <ExternalLink className="h-3.5 w-3.5" />
             </a>
           )}
 

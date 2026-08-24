@@ -1,3 +1,4 @@
+import { Printer } from "lucide-react";
 import Link from "next/link";
 import { getCurrentPlanRecipes } from "@/lib/mealplan/queries";
 import { removeRecipeFromPlan } from "@/lib/mealplan/actions";
@@ -99,9 +100,9 @@ export default async function PlanDrawerContent() {
             href="/plan/print"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-medium text-emerald-700 hover:underline"
+            className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
           >
-            🖨️ Print
+            <Printer className="h-3.5 w-3.5" /> Print
           </Link>
         </div>
         <ul className="mt-2 space-y-1.5">

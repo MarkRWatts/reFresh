@@ -1,4 +1,4 @@
-import EyeOffIcon from "@/components/icons/EyeOffIcon";
+import { EyeOff } from "lucide-react";
 import { toggleHidden } from "@/lib/recipes/hiddenActions";
 
 /** A plain server-rendered form + button, same shape as FavouriteToggleButton — toggles isHidden rather than isFavourite. Only shown for auto-imported (HelloFresh-scraped) recipes; a custom/PDF recipe gets a real delete instead (see DeleteRecipeButton on the edit page). */
@@ -24,7 +24,7 @@ export default function HideToggleButton({
               : "border-white/70 bg-white/80 text-zinc-500 hover:text-zinc-900"
           }`}
         >
-          <EyeOffIcon className="h-4 w-4" />
+          <EyeOff className="h-4 w-4" />
         </button>
       </form>
     );
@@ -40,7 +40,7 @@ export default function HideToggleButton({
             : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400"
         }`}
       >
-        <EyeOffIcon className="h-4 w-4" />
+        <EyeOff className="h-4 w-4" />
         {isHidden ? "Unhide" : "Hide"}
       </button>
     </form>

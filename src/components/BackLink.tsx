@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 /**
@@ -22,9 +23,9 @@ export default function BackLink({ className }: { className?: string }) {
           router.push("/");
         }
       }}
-      className={className}
+      className={`inline-flex items-center gap-1 ${className ?? ""}`}
     >
-      ← Back to recipes
+      <ArrowLeft className="h-3.5 w-3.5" /> Back to recipes
     </button>
   );
 }
