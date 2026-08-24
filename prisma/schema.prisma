@@ -166,6 +166,23 @@ model Ingredient {
   id            String             @id @default(cuid())
   canonicalName String             @unique
   category      IngredientCategory @default(OTHER)
+  // The unit HelloFresh actually packages/ships this ingredient in, when
+  // it isn't already a plain weight/volume — e.g. "pot(s)", "sachet(s)",
+  // "carton(s)" (see the `unit` values landing in RecipeIngredient).
+  // Paired with packagedUnitQuantity/packagedUnitBase below so the
+  // shopping list can convert "1 pot" into a real, summable amount (see
+  // sharedIngredients.ts). Filled in by manual research on the ingredient
+  // review page — HelloFresh's scraped data never states real pack sizes.
+  packagedUnit         String?
+  // How many packagedUnitBase (grams or millilitres) one packagedUnit
+  // equals — e.g. 150 for a "pot(s)" of soured cream measured in "ml".
+  packagedUnitQuantity Float?
+  packagedUnitBase     String? // "g" or "ml"
+  // Free-text substitution guidance for a HelloFresh-proprietary
+  // blend/product with no single real-world supermarket equivalent (e.g.
+  // "Central American Style Spice Mix") — shown on the shopping list next
+  // to the ingredient rather than powering any matching logic.
+  shoppingListNote     String?
 
   aliases          IngredientAlias[]
   recipeIngredients RecipeIngredient[]

@@ -12,6 +12,7 @@
     "scrape": "tsx scripts/scrape.ts",
     "reprocess": "tsx scripts/scrape.ts --force",
     "detect-variants": "tsx scripts/detect-variants.ts",
+    "merge-ingredients": "tsx scripts/merge-ingredients.ts",
     "import-pdf": "tsx scripts/import-pdf.ts",
     "commit-vision-import": "tsx scripts/commit-vision-import.ts",
     "db:snapshot": "tsx scripts/db-snapshot.ts",

@@ -11,6 +11,45 @@ const INVARIANT_WORDS_ENDING_IN_S = new Set([
   "manis",
 ]);
 
+// Leading qualifiers that describe provenance/welfare standard rather than
+// a different purchasable product — "British Chicken Breast" and "Chicken
+// Breast" are the same shopping-list item, just scraped from recipes that
+// did/didn't bother naming the origin. Longest phrases first, so "free
+// range" matches before a hypothetical bare "free" would.
+//
+// Deliberately narrow and only added after checking each word against the
+// actual scraped catalog for false positives — "English" looked like the
+// same kind of qualifier but isn't: "English Mustard" is a genuinely
+// different product from plain "Mustard" (a specific hot condiment, not a
+// provenance label), so it's excluded despite the superficial pattern
+// match. Same reasoning excludes prep-state words like "diced" or
+// "minced", which sometimes name a different purchasable product (mince
+// vs. steak) rather than just describing one.
+const ORIGIN_QUALIFIER_PREFIXES = [
+  "rspca assured",
+  "free-range",
+  "free range",
+  "outdoor-bred",
+  "outdoor bred",
+  "british",
+];
+
+function stripOriginQualifiers(n: string): string {
+  let result = n;
+  let strippedSomething = true;
+  while (strippedSomething) {
+    strippedSomething = false;
+    for (const prefix of ORIGIN_QUALIFIER_PREFIXES) {
+      if (result.startsWith(`${prefix} `)) {
+        result = result.slice(prefix.length + 1);
+        strippedSomething = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 function stripTrailingPlural(n: string): string {
   const words = n.split(" ");
   const lastWord = words[words.length - 1];
@@ -39,9 +78,14 @@ function stripTrailingPlural(n: string): string {
  * whole point of finding shared ingredients across recipes. That clause is
  * stripped before canonicalizing.
  *
+ * Also strips leading origin/welfare-standard qualifiers ("British",
+ * "Free-Range", ...) that don't change the actual product — see
+ * ORIGIN_QUALIFIER_PREFIXES.
+ *
  * Intentionally still fairly simple (a curated alias table grows over time
  * as more real data is scraped) — this catches the common casing,
- * pluralization, and purpose-clause variance seen across HelloFresh recipes.
+ * pluralization, purpose-clause, and origin-qualifier variance seen across
+ * HelloFresh recipes.
  */
 export function canonicalizeIngredientName(name: string): string {
   let n = name.trim().toLowerCase();
@@ -54,6 +98,7 @@ export function canonicalizeIngredientName(name: string): string {
   // a distinct purchasable ingredient.
   if (n === "boiled water" || n === "boiling water") n = "water";
 
+  n = stripOriginQualifiers(n);
   n = stripTrailingPlural(n);
 
   return n;

@@ -20,13 +20,33 @@ export interface IngredientGroup {
   isShared: boolean; // used in 2+ of the given recipes
   entries: ShoppingListEntry[];
   /**
-   * Quantities summed within matching units only — no unit conversion
-   * (e.g. tbsp -> ml) is done, so an ingredient specified in two different
-   * units across recipes shows as two separate totals rather than one
-   * combined figure. Entries with no parsed quantity are simply omitted
-   * from every bucket, not silently counted as zero.
+   * Quantities summed within matching units only. Two conversions happen
+   * before summing (see the main loop below): known unit-string synonyms
+   * ("grams"/"g") are folded together, and an ingredient's researched
+   * packaged-unit size (see the ingredient review page — "1 pot" of soured
+   * cream is 150ml) converts that into its base weight/volume. General
+   * unit conversion (e.g. tbsp -> ml) is still out of scope. Entries with
+   * no parsed quantity are simply omitted from every bucket, not silently
+   * counted as zero.
    */
   quantitiesByUnit: QuantityByUnit[];
+}
+
+// Raw HelloFresh unit strings that mean the same physical unit but appear
+// inconsistently across recipes/imports (e.g. "grams" on one recipe, "g"
+// on another) — folded together so shopping-list totals actually combine
+// instead of splitting into near-duplicate buckets.
+const UNIT_SYNONYMS: Record<string, string> = {
+  gram: "g",
+  grams: "g",
+  milliliter: "ml",
+  milliliters: "ml",
+  "milliliter(s)": "ml",
+};
+
+function normalizeUnitLabel(unit: string | null): string | null {
+  if (unit == null) return null;
+  return UNIT_SYNONYMS[unit] ?? unit;
 }
 
 function summarizeQuantities(entries: ShoppingListEntry[]): QuantityByUnit[] {
@@ -98,11 +118,29 @@ export async function computeSharedIngredients(
     const targetServings = servingsOverrides.get(ri.recipeId);
     const multiplier = baseServings && targetServings ? targetServings / baseServings : 1;
 
+    let quantity = ri.quantity != null ? ri.quantity * multiplier : null;
+    let unit = normalizeUnitLabel(ri.unit);
+
+    // "2 pot(s)" of soured cream -> "300 ml", using the pack size a human
+    // researched on the ingredient review page — makes it mergeable with
+    // any recipe that already specifies soured cream directly in ml.
+    const { packagedUnit, packagedUnitQuantity, packagedUnitBase } = ri.ingredient;
+    if (
+      quantity != null &&
+      packagedUnit &&
+      packagedUnitQuantity != null &&
+      packagedUnitBase &&
+      ri.unit?.toLowerCase() === packagedUnit.toLowerCase()
+    ) {
+      quantity *= packagedUnitQuantity;
+      unit = normalizeUnitLabel(packagedUnitBase);
+    }
+
     group.entries.push({
       recipeId: ri.recipeId,
       recipeName: recipeById.get(ri.recipeId)?.name ?? "Unknown recipe",
-      quantity: ri.quantity != null ? ri.quantity * multiplier : null,
-      unit: ri.unit,
+      quantity,
+      unit,
       rawText: ri.rawText,
     });
   }
