@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import BackLink from "@/components/BackLink";
 import IngredientConversionTable from "@/components/IngredientConversionTable";
+import RebaseToMlButton from "@/components/RebaseToMlButton";
 import { getIngredientConversionReview } from "@/lib/ingredients/conversionQueries";
 
 export default async function IngredientConversionPage({
@@ -15,6 +16,8 @@ export default async function IngredientConversionPage({
   const { ingredient, rows } = review;
   const cleanCount = rows.filter((r) => r.matchType === "clean-match").length;
   const needsJudgmentCount = rows.filter((r) => r.matchType === "no-clean-match").length;
+  const rebaseEligible = rows.filter((r) => r.assumedDensity);
+  const otherUnit = ingredient.packagedUnitBase === "g" ? "ml" : "g";
 
   return (
     <main className="w-full flex-1 px-4 py-6 sm:px-6">
@@ -30,6 +33,13 @@ export default async function IngredientConversionPage({
         {needsJudgmentCount === 1 ? "doesn't" : "don't"} land near a whole/half/etc. pack and need an
         actual read of the recipe before you decide.
       </p>
+
+      <RebaseToMlButton
+        ingredientId={ingredient.id}
+        eligibleCount={rebaseEligible.length}
+        otherUnit={otherUnit}
+        targetUnit={ingredient.packagedUnitBase}
+      />
 
       <IngredientConversionTable rows={rows} ingredient={ingredient} />
     </main>
