@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import BackLink from "@/components/BackLink";
+import BulkConversionButton from "@/components/BulkConversionButton";
 import IngredientConversionTable from "@/components/IngredientConversionTable";
-import RebaseToMlButton from "@/components/RebaseToMlButton";
+import { convertPackagedUnitMentionsToBase, rebaseIngredientToPackagedBase } from "@/lib/ingredients/actions";
 import { getIngredientConversionReview } from "@/lib/ingredients/conversionQueries";
 
 export default async function IngredientConversionPage({
@@ -14,10 +15,9 @@ export default async function IngredientConversionPage({
   if (!review) notFound();
 
   const { ingredient, rows } = review;
-  const cleanCount = rows.filter((r) => r.matchType === "clean-match").length;
-  const needsJudgmentCount = rows.filter((r) => r.matchType === "no-clean-match").length;
-  const rebaseEligible = rows.filter((r) => r.assumedDensity);
-  const otherUnit = ingredient.packagedUnitBase === "g" ? "ml" : "g";
+  const relabelCount = rows.filter((r) => r.matchType === "missing-unit" || r.matchType === "density-assumed").length;
+  const packagedMentionCount = rows.filter((r) => r.matchType === "packaged-unit-mention").length;
+  const ambiguousCount = rows.filter((r) => r.matchType === "missing-unit-ambiguous").length;
 
   return (
     <main className="w-full flex-1 px-4 py-6 sm:px-6">
@@ -27,18 +27,34 @@ export default async function IngredientConversionPage({
         {ingredient.canonicalName}
       </h1>
       <p className="mt-1 max-w-2xl text-sm text-zinc-500">
-        1 {ingredient.packagedUnit} = {ingredient.packagedUnitQuantity} {ingredient.packagedUnitBase}.
-        Nothing here is applied automatically — {cleanCount} recipe{cleanCount === 1 ? "" : "s"}{" "}
-        {cleanCount === 1 ? "is" : "are"} a clean match worth a quick look, {needsJudgmentCount} more{" "}
-        {needsJudgmentCount === 1 ? "doesn't" : "don't"} land near a whole/half/etc. pack and need an
-        actual read of the recipe before you decide.
+        1 {ingredient.packagedUnit} = {ingredient.packagedUnitQuantity} {ingredient.packagedUnitBase} — recipes get
+        normalized to {ingredient.packagedUnitBase}, the precise unit you&rsquo;d actually buy this in, rather than a
+        purchase-size count. Nothing here is applied automatically.
+        {ambiguousCount > 0 &&
+          ` ${ambiguousCount} more recipe${ambiguousCount === 1 ? " has" : "s have"} a bare number too small to confidently be ${ingredient.packagedUnitBase} — probably meant as a ${ingredient.packagedUnit} count instead, so those need a pick between the two readings below rather than a bulk fix.`}
       </p>
 
-      <RebaseToMlButton
-        ingredientId={ingredient.id}
-        eligibleCount={rebaseEligible.length}
-        otherUnit={otherUnit}
-        targetUnit={ingredient.packagedUnitBase}
+      <BulkConversionButton
+        label={`Fill in / relabel ${relabelCount} recipe${relabelCount === 1 ? "" : "s"} as ${ingredient.packagedUnitBase}`}
+        resultLabel="Relabeled"
+        eligibleCount={relabelCount}
+        confirmMessage={
+          `Fill in a missing unit, or relabel grams/ml, as "${ingredient.packagedUnitBase}" for ${relabelCount} recipe${relabelCount === 1 ? "" : "s"}?\n\n` +
+          `The number itself won't change — a bare number is assumed to already be in ${ingredient.packagedUnitBase}, ` +
+          `and a grams/ml mismatch assumes ~1g ≈ 1ml, a reasonable approximation for a dairy/liquid-ish product but not an exact conversion.`
+        }
+        action={rebaseIngredientToPackagedBase.bind(null, ingredient.id)}
+      />
+      <BulkConversionButton
+        label={`Convert ${packagedMentionCount} "${ingredient.packagedUnit}" mention${packagedMentionCount === 1 ? "" : "s"} to ${ingredient.packagedUnitBase}`}
+        resultLabel="Converted"
+        eligibleCount={packagedMentionCount}
+        confirmMessage={
+          `Convert ${packagedMentionCount} recipe${packagedMentionCount === 1 ? "" : "s"} currently in "${ingredient.packagedUnit}" ` +
+          `to ${ingredient.packagedUnitBase} (e.g. "1 ${ingredient.packagedUnit}" -> "${ingredient.packagedUnitQuantity}${ingredient.packagedUnitBase}")?\n\n` +
+          `This multiplies out using the packaged size above, so the actual amount is preserved.`
+        }
+        action={convertPackagedUnitMentionsToBase.bind(null, ingredient.id)}
       />
 
       <IngredientConversionTable rows={rows} ingredient={ingredient} />

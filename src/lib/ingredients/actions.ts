@@ -77,16 +77,16 @@ export async function updateIngredientNote(id: string, shoppingListNote: string 
 }
 
 /**
- * Rewrites ONE recipe's ingredient line to use a packaged-unit quantity
- * instead of a raw weight/volume — e.g. "10g" of beef stock paste becomes
- * "1x" beef stock pot, because that particular recipe's amount turned out
- * to be (close to) a whole pot. Deliberately per-row, not per-ingredient:
- * see getIngredientConversionReview's doc comment for why this can't be a
- * blanket rule (a different recipe using the same ingredient might
- * legitimately want a different, non-whole-pot amount). Only `quantity`
- * and `unit` change — `rawText` (what HelloFresh's page actually said) is
- * left alone as a provenance record, and isn't shown anywhere in the app
- * itself, so there's nothing user-visible left inconsistent.
+ * Rewrites ONE recipe's ingredient line to a specific quantity/unit —
+ * used for every per-row apply on the conversion review page (filling in
+ * a missing unit, relabeling grams as ml, or multiplying out an explicit
+ * packaged-unit mention into the base measure). Deliberately per-row, not
+ * per-ingredient: see getIngredientConversionReview's doc comment for why
+ * this can't be a blanket rule applied identically to every recipe. Only
+ * `quantity` and `unit` change — `rawText` (what HelloFresh's page
+ * actually said) is left alone as a provenance record, and isn't shown
+ * anywhere in the app itself, so there's nothing user-visible left
+ * inconsistent.
  */
 export async function applyPackagedUnitConversion(
   recipeIngredientId: string,
@@ -102,31 +102,44 @@ export async function applyPackagedUnitConversion(
 }
 
 /**
- * Bulk-relabels every recipe currently recording this ingredient in the
- * "other" of grams/millilitres (whichever one isn't packagedUnitBase) to
- * packagedUnitBase instead — e.g. every "150g creme fraiche" becomes
- * "150ml creme fraiche". The number itself never changes, only the unit
- * label, so unlike applyPackagedUnitConversion this doesn't need a
- * per-row "is this a clean fraction of a pack" check — it's the same
- * density assumption (~1g ≈ 1ml) already flagged on every "assumes
- * 1g≈1ml" suggestion, just without additionally rounding to a pack
- * count. Safe to run before doing any pack-count conversions: once a row
- * reads "ml" for real, matching it against the pack size stops requiring
- * that assumption at all. Still a bulk write, so callers should confirm
- * with the user first (see RebaseToMlButton).
+ * Bulk-fixes every recipe currently recording this ingredient as either
+ * (a) a bare number with no unit at all, or (b) the "other" of grams/
+ * millilitres (whichever one isn't packagedUnitBase) — both become
+ * packagedUnitBase, e.g. "150 Creme Fraiche" and "150g Creme Fraiche"
+ * both become "150ml Creme Fraiche". The number itself never changes,
+ * only the unit label: a missing unit is simply filled in, and the
+ * grams/ml case relies on the same density assumption (~1g ≈ 1ml)
+ * already flagged wherever "assumes 1g≈1ml" appears, applied uniformly
+ * rather than needing a per-row judgment call — a straight relabel loses
+ * no precision, unlike snapping to a pack count would.
+ *
+ * Deliberately skips small bare numbers (< 10% of one packaged unit) —
+ * see getIngredientConversionReview's "missing-unit-ambiguous" — those
+ * are more likely a packaged-unit count written without its label (e.g.
+ * "0.75" meaning "¾ pot") than an implausibly tiny base-unit amount, so
+ * this bulk action would silently get them wrong. Left for individual
+ * review instead.
+ *
+ * Still a bulk write for everything it does touch, so callers should
+ * confirm with the user first (see BulkConversionButton).
  */
 export async function rebaseIngredientToPackagedBase(ingredientId: string): Promise<number> {
   const ingredient = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
-  if (!ingredient?.packagedUnitBase) return 0;
+  if (!ingredient?.packagedUnitBase || ingredient.packagedUnitQuantity == null) return 0;
   const base = ingredient.packagedUnitBase;
   const otherBase = base === "g" ? "ml" : base === "ml" ? "g" : null;
-  if (!otherBase) return 0;
+  const ambiguityThreshold = ingredient.packagedUnitQuantity * 0.1;
 
   const usages = await prisma.recipeIngredient.findMany({
-    where: { ingredientId, unit: { not: null } },
-    select: { id: true, unit: true },
+    where: { ingredientId, quantity: { not: null } },
+    select: { id: true, unit: true, quantity: true },
   });
-  const idsToRebase = usages.filter((u) => normalizeUnitLabel(u.unit) === otherBase).map((u) => u.id);
+  const idsToRebase = usages
+    .filter((u) => {
+      if (u.unit == null) return u.quantity! >= ambiguityThreshold;
+      return otherBase != null && normalizeUnitLabel(u.unit) === otherBase;
+    })
+    .map((u) => u.id);
   if (idsToRebase.length === 0) return 0;
 
   await prisma.recipeIngredient.updateMany({
@@ -135,4 +148,42 @@ export async function rebaseIngredientToPackagedBase(ingredientId: string): Prom
   });
   revalidatePath(`/ingredients/review/${ingredientId}/convert`);
   return idsToRebase.length;
+}
+
+/**
+ * Bulk-converts every recipe that records this ingredient directly in
+ * its packaged unit (e.g. "1 pot") into the base measure by multiplying
+ * out — "1 pot" of a 150ml pack becomes "150ml". Unlike
+ * rebaseIngredientToPackagedBase this changes the number, not just the
+ * label, but it's still fully deterministic (no rounding/judgment
+ * involved) — a recipe should store a precise, scalable amount rather
+ * than a purchase-size count, which is also the direction
+ * computeSharedIngredients (sharedIngredients.ts) already treats as
+ * canonical for shopping-list summing. Runs as individual updates rather
+ * than one updateMany since each row's new quantity depends on its own
+ * old quantity — fine at the scale this runs at (how many recipes
+ * literally spell out "1 pot" is small by construction).
+ */
+export async function convertPackagedUnitMentionsToBase(ingredientId: string): Promise<number> {
+  const ingredient = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
+  if (!ingredient?.packagedUnit || ingredient.packagedUnitQuantity == null || !ingredient.packagedUnitBase) {
+    return 0;
+  }
+
+  const usages = await prisma.recipeIngredient.findMany({
+    where: { ingredientId, quantity: { not: null }, unit: { equals: ingredient.packagedUnit, mode: "insensitive" } },
+    select: { id: true, quantity: true },
+  });
+  if (usages.length === 0) return 0;
+
+  await Promise.all(
+    usages.map((u) =>
+      prisma.recipeIngredient.update({
+        where: { id: u.id },
+        data: { quantity: u.quantity! * ingredient.packagedUnitQuantity!, unit: ingredient.packagedUnitBase },
+      }),
+    ),
+  );
+  revalidatePath(`/ingredients/review/${ingredientId}/convert`);
+  return usages.length;
 }

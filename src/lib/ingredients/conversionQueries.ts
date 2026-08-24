@@ -2,9 +2,11 @@ import { prisma } from "@/lib/db";
 import { normalizeUnitLabel } from "./unitSynonyms";
 
 export type ConversionMatchType =
-  | "already-packaged"
-  | "clean-match"
-  | "no-clean-match"
+  | "already-base"
+  | "missing-unit"
+  | "missing-unit-ambiguous"
+  | "density-assumed"
+  | "packaged-unit-mention"
   | "other-unit"
   | "no-quantity";
 
@@ -16,9 +18,12 @@ export interface ConversionCandidateRow {
   quantity: number | null;
   unit: string | null;
   matchType: ConversionMatchType;
-  /** Only set for "clean-match" — the packagedUnit count this row's amount cleanly divides into (see nearestCleanFraction). */
+  /** The quantity/unit this row would become if applied — always set except for "already-base"/"other-unit"/"no-quantity", where there's nothing to apply. For "missing-unit-ambiguous" this is the "already in the base unit" reading — see alternateQuantity for the other one. */
   suggestedQuantity: number | null;
-  /** True when the suggestion required treating grams and millilitres as equivalent (1g ≈ 1ml) — a reasonable approximation for a dairy/liquid-ish product, but a real assumption, not a unit conversion. Never computed silently without being flagged — see getIngredientConversionReview. */
+  suggestedUnit: string | null;
+  /** Only set for "missing-unit-ambiguous" — the OTHER plausible reading: this bare number as a count of the packaged unit itself (e.g. "0.75" meaning "¾ pot"), multiplied out to the same base unit as suggestedQuantity. Two numbers because a small bare number genuinely could be either — see the classification doc comment. */
+  alternateQuantity: number | null;
+  /** True when the suggestion required treating grams and millilitres as equivalent (1g ≈ 1ml) — a reasonable approximation for a dairy/liquid-ish product, but a real assumption, not a unit conversion. Never computed silently without being flagged. */
   assumedDensity: boolean;
 }
 
@@ -33,53 +38,46 @@ export interface IngredientConversionReview {
   rows: ConversionCandidateRow[];
 }
 
-// Denominators tried smallest-first, so a simpler fraction (½) wins over a
-// coincidentally-close complex one (7/8) when both are within tolerance.
-// Covers every fraction actually seen in this catalog so far (halves,
-// thirds, quarters, fifths, eighths — see ingredientParser.ts's
-// UNICODE_FRACTIONS) plus a couple of others that are plausible for
-// recipe portions.
-const NICE_DENOMINATORS = [1, 2, 3, 4, 5, 8];
-const RELATIVE_TOLERANCE = 0.08;
-
-/**
- * Finds the simplest "nice" fraction (whole, half, third, quarter, fifth,
- * eighth) a ratio is close to, or null if it doesn't land near any of
- * them — the line between "safe to auto-suggest" and "needs a human to
- * actually look at this recipe," per the caution the review page exists
- * for. Deliberately a heuristic, not a proof: it's there to separate the
- * obvious cases from the ones worth a closer look, not to make the
- * decision itself — the reviewer still has to hit Apply.
- */
-export function nearestCleanFraction(ratio: number): number | null {
-  if (!Number.isFinite(ratio) || ratio <= 0) return null;
-  for (const d of NICE_DENOMINATORS) {
-    const scaled = ratio * d;
-    const nearestInt = Math.round(scaled);
-    if (nearestInt === 0) continue;
-    if (Math.abs(scaled - nearestInt) <= RELATIVE_TOLERANCE) {
-      return nearestInt / d;
-    }
-  }
-  return null;
-}
-
 /**
  * For one ingredient with a researched packaged-unit size (e.g. "1 pot(s)
  * of creme fraiche = 150ml" — see the ingredient review page), lists every
- * recipe that uses it and classifies how its current quantity/unit
- * relates to that packaged size: already expressed in the packaged unit,
- * a clean match worth converting ("150ml" -> "1 pot(s)"), an amount that
- * doesn't land near a clean fraction of a pack (left for manual
- * judgment), or a different unit entirely (e.g. "tbsp") this tool doesn't
- * attempt to relate. Returns null if the ingredient doesn't have a
- * complete packaged-unit definition yet.
+ * recipe that uses it and classifies its current quantity/unit against
+ * the ingredient's base measure (packagedUnitBase — the unit you'd
+ * actually buy it in, e.g. ml for a pourable dairy product):
  *
- * Never applies anything — see applyPackagedUnitConversion in actions.ts,
- * a per-row, human-triggered write. This is deliberately a recipe-by-
- * recipe decision, not an ingredient-wide rule: the same ingredient can
- * legitimately want a whole pot in one recipe and a genuinely odd amount
- * in another.
+ * - already-base: unit already matches — nothing to do.
+ * - missing-unit: no unit recorded at all (HelloFresh's own text often
+ *   just says e.g. "150 Creme Fraiche") — for this kind of ingredient a
+ *   bare number IS the base unit, just missing its label, so the fix is
+ *   filling in the label, not touching the number. Only for numbers large
+ *   enough that this reading is actually plausible — see
+ *   missing-unit-ambiguous for the rest.
+ * - missing-unit-ambiguous: also a bare number, but small enough
+ *   (< 10% of one packaged unit) that it's genuinely unclear whether it
+ *   means "already in the base unit" or "a count of the packaged unit
+ *   itself" — e.g. a bare "0.75" for creme fraiche is a nonsensical
+ *   0.75ml but a completely normal "¾ pot" (112.5ml). Found by checking
+ *   real data before trusting this bulk-eligible, not by assumption —
+ *   both readings are surfaced (see alternateQuantity) and neither is
+ *   suggested by default; this is deliberately excluded from the bulk
+ *   "fill in / relabel" action.
+ * - density-assumed: recorded in the "other" of grams/millilitres — a
+ *   straight relabel, correct assuming ~1g ≈ 1ml (flagged, not asserted).
+ * - packaged-unit-mention: recorded directly in the packaged unit itself
+ *   (e.g. "1 pot") — converted to the base measure by multiplying out
+ *   (1 pot -> 150ml), since a recipe should store a precise, scalable
+ *   amount rather than a purchase-size count. This is also the direction
+ *   computeSharedIngredients (sharedIngredients.ts) already treats as
+ *   canonical for shopping-list summing — recipes stored this way don't
+ *   need that on-the-fly conversion at all.
+ * - other-unit: a genuinely unrelated unit (tbsp, etc.) this tool doesn't
+ *   attempt to relate.
+ * - no-quantity: nothing recorded to convert.
+ *
+ * Returns null if the ingredient doesn't have a complete packaged-unit
+ * definition yet. Never applies anything itself — see actions.ts's
+ * applyPackagedUnitConversion (per-row) and rebaseIngredientToPackagedBase
+ * / convertPackagedUnitMentionsToBase (bulk), all human-triggered.
  */
 export async function getIngredientConversionReview(
   ingredientId: string,
@@ -102,7 +100,6 @@ export async function getIngredientConversionReview(
   });
 
   const normalizedPackagedUnit = packagedUnit.toLowerCase();
-  const normalizedBase = normalizeUnitLabel(packagedUnitBase);
 
   const rows: ConversionCandidateRow[] = usages.map((u) => {
     const base = {
@@ -114,42 +111,99 @@ export async function getIngredientConversionReview(
       unit: u.unit,
     };
 
-    if (u.unit && u.unit.toLowerCase() === normalizedPackagedUnit) {
-      return { ...base, matchType: "already-packaged" as const, suggestedQuantity: null, assumedDensity: false };
-    }
     if (u.quantity == null) {
-      return { ...base, matchType: "no-quantity" as const, suggestedQuantity: null, assumedDensity: false };
+      return {
+        ...base,
+        matchType: "no-quantity" as const,
+        suggestedQuantity: null,
+        suggestedUnit: null,
+        alternateQuantity: null,
+        assumedDensity: false,
+      };
     }
 
     const normalizedUnit = normalizeUnitLabel(u.unit);
-    const isExactUnit = normalizedUnit === normalizedBase;
-    // g and ml aren't actually the same measure, but for a dairy/liquid-ish
-    // product they're close enough (density ~1) that it's worth surfacing
-    // as a suggestion — just visibly flagged as an assumption (see
-    // assumedDensity), never silently treated as equivalent to an exact
-    // unit match.
-    const isGramMlPair =
-      (normalizedUnit === "g" && normalizedBase === "ml") || (normalizedUnit === "ml" && normalizedBase === "g");
-    if (!isExactUnit && !isGramMlPair) {
-      return { ...base, matchType: "other-unit" as const, suggestedQuantity: null, assumedDensity: false };
+    if (normalizedUnit === packagedUnitBase) {
+      return {
+        ...base,
+        matchType: "already-base" as const,
+        suggestedQuantity: null,
+        suggestedUnit: null,
+        alternateQuantity: null,
+        assumedDensity: false,
+      };
     }
 
-    const ratio = u.quantity / packagedUnitQuantity;
-    const clean = nearestCleanFraction(ratio);
-    return clean != null
-      ? { ...base, matchType: "clean-match" as const, suggestedQuantity: clean, assumedDensity: !isExactUnit }
-      : { ...base, matchType: "no-clean-match" as const, suggestedQuantity: null, assumedDensity: !isExactUnit };
+    if (u.unit == null) {
+      // Below this, a bare number is too small to plausibly already be
+      // the base unit (0.75ml of creme fraiche isn't a real recipe
+      // amount) but fits perfectly as a packaged-unit count (¾ pot) —
+      // see missing-unit-ambiguous in the doc comment above.
+      const AMBIGUITY_THRESHOLD = packagedUnitQuantity * 0.1;
+      if (u.quantity < AMBIGUITY_THRESHOLD) {
+        return {
+          ...base,
+          matchType: "missing-unit-ambiguous" as const,
+          suggestedQuantity: u.quantity,
+          suggestedUnit: packagedUnitBase,
+          alternateQuantity: u.quantity * packagedUnitQuantity,
+          assumedDensity: false,
+        };
+      }
+      return {
+        ...base,
+        matchType: "missing-unit" as const,
+        suggestedQuantity: u.quantity,
+        suggestedUnit: packagedUnitBase,
+        alternateQuantity: null,
+        assumedDensity: false,
+      };
+    }
+
+    if (u.unit.toLowerCase() === normalizedPackagedUnit) {
+      return {
+        ...base,
+        matchType: "packaged-unit-mention" as const,
+        suggestedQuantity: u.quantity * packagedUnitQuantity,
+        suggestedUnit: packagedUnitBase,
+        alternateQuantity: null,
+        assumedDensity: false,
+      };
+    }
+
+    const isGramMlPair =
+      (normalizedUnit === "g" && packagedUnitBase === "ml") || (normalizedUnit === "ml" && packagedUnitBase === "g");
+    if (isGramMlPair) {
+      return {
+        ...base,
+        matchType: "density-assumed" as const,
+        suggestedQuantity: u.quantity,
+        suggestedUnit: packagedUnitBase,
+        alternateQuantity: null,
+        assumedDensity: true,
+      };
+    }
+
+    return {
+      ...base,
+      matchType: "other-unit" as const,
+      suggestedQuantity: null,
+      suggestedUnit: null,
+      alternateQuantity: null,
+      assumedDensity: false,
+    };
   });
 
-  // Most-actionable first: clean matches are what a reviewer should look
-  // at first, "already packaged" and "other unit" rows are informational
-  // noise best left at the bottom.
+  // Most-actionable first; "already-base" and "other-unit" are noise best
+  // left at the bottom.
   const MATCH_TYPE_ORDER: Record<ConversionMatchType, number> = {
-    "clean-match": 0,
-    "no-clean-match": 1,
-    "already-packaged": 2,
-    "other-unit": 3,
-    "no-quantity": 4,
+    "packaged-unit-mention": 0,
+    "missing-unit": 1,
+    "density-assumed": 2,
+    "missing-unit-ambiguous": 3,
+    "already-base": 4,
+    "other-unit": 5,
+    "no-quantity": 6,
   };
   rows.sort(
     (a, b) =>

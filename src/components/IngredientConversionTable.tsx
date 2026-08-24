@@ -12,26 +12,26 @@ interface IngredientInfo {
 }
 
 const MATCH_TYPE_LABEL: Record<string, string> = {
-  "already-packaged": "Already in packaged units",
+  "already-base": "Already in the base unit",
   "other-unit": "Different unit — not handled here",
   "no-quantity": "No quantity recorded",
 };
 
 function formatQuantity(row: ConversionCandidateRow): string {
   if (row.quantity == null) return row.unit ?? "—";
-  return `${row.quantity} ${row.unit ?? ""}`.trim();
+  return `${row.quantity} ${row.unit ?? "(no unit)"}`.trim();
 }
 
 function Row({ row, ingredient }: { row: ConversionCandidateRow; ingredient: IngredientInfo }) {
   const [applied, setApplied] = useState<{ quantity: number; unit: string } | null>(null);
-  const [overrideQuantity, setOverrideQuantity] = useState(
-    row.matchType === "no-clean-match" && row.quantity != null ? String(row.quantity) : "",
-  );
 
-  async function apply(quantity: number) {
-    await applyPackagedUnitConversion(row.recipeIngredientId, ingredient.id, quantity, ingredient.packagedUnit);
-    setApplied({ quantity, unit: ingredient.packagedUnit });
+  async function apply(quantity: number, unit: string) {
+    await applyPackagedUnitConversion(row.recipeIngredientId, ingredient.id, quantity, unit);
+    setApplied({ quantity, unit });
   }
+
+  const isActionable =
+    row.matchType === "missing-unit" || row.matchType === "density-assumed" || row.matchType === "packaged-unit-mention";
 
   return (
     <tr className="border-t border-zinc-100">
@@ -46,46 +46,42 @@ function Row({ row, ingredient }: { row: ConversionCandidateRow; ingredient: Ing
           <span className="flex items-center gap-1 font-medium text-emerald-700">
             <Check className="h-4 w-4" /> {applied.quantity} {applied.unit}
           </span>
-        ) : row.matchType === "clean-match" ? (
+        ) : isActionable ? (
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => apply(row.suggestedQuantity!)}
+              onClick={() => apply(row.suggestedQuantity!, row.suggestedUnit!)}
               className="rounded-full border border-emerald-600 bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
             >
-              Apply: {row.suggestedQuantity} {ingredient.packagedUnit}
+              Apply: {row.suggestedQuantity} {row.suggestedUnit}
             </button>
             {row.assumedDensity && (
-              <span className="text-xs text-amber-600" title="Recipe is in grams, packaged size is in ml (or vice versa) — assumes ~1g ≈ 1ml">
+              <span
+                className="text-xs text-amber-600"
+                title="Recipe is in grams, base unit is ml (or vice versa) — assumes ~1g ≈ 1ml"
+              >
                 assumes 1g≈1ml
               </span>
             )}
           </div>
-        ) : row.matchType === "no-clean-match" ? (
-          <div className="flex items-center gap-1.5">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={overrideQuantity}
-              onChange={(e) => setOverrideQuantity(e.target.value)}
-              className="w-16 rounded border border-zinc-200 px-2 py-1 text-sm"
-            />
-            <span className="text-xs text-zinc-500">{ingredient.packagedUnit}</span>
+        ) : row.matchType === "missing-unit-ambiguous" ? (
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                const value = Number(overrideQuantity);
-                if (Number.isFinite(value) && value > 0) apply(value);
-              }}
+              onClick={() => apply(row.suggestedQuantity!, row.suggestedUnit!)}
               className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:border-zinc-400"
+              title="Treat the bare number as already being in the base unit"
             >
-              Apply
+              Already {row.suggestedQuantity} {row.suggestedUnit}
             </button>
-            {row.assumedDensity && (
-              <span className="text-xs text-amber-600" title="Recipe is in grams, packaged size is in ml (or vice versa) — assumes ~1g ≈ 1ml">
-                assumes 1g≈1ml
-              </span>
-            )}
+            <button
+              type="button"
+              onClick={() => apply(row.alternateQuantity!, row.suggestedUnit!)}
+              className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:border-zinc-400"
+              title={`Treat the bare number as a count of ${ingredient.packagedUnit}`}
+            >
+              {row.quantity} {ingredient.packagedUnit} = {row.alternateQuantity} {row.suggestedUnit}
+            </button>
           </div>
         ) : (
           <span className="text-xs text-zinc-400">{MATCH_TYPE_LABEL[row.matchType]}</span>
