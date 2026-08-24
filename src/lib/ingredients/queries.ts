@@ -13,17 +13,23 @@ export interface IngredientReviewParams {
 
 const DEFAULT_PAGE_SIZE = 50;
 
-function buildOrderBy(sort: IngredientSortOption | undefined): Prisma.IngredientOrderByWithRelationInput[] {
+interface SortableRow {
+  canonicalName: string;
+  category: string;
+  usageCount: number;
+}
+
+function compareRows(sort: IngredientSortOption | undefined, a: SortableRow, b: SortableRow): number {
   switch (sort) {
     case "usage_asc":
-      return [{ recipeIngredients: { _count: "asc" } }, { canonicalName: "asc" }];
+      return a.usageCount - b.usageCount || a.canonicalName.localeCompare(b.canonicalName);
     case "name_asc":
-      return [{ canonicalName: "asc" }];
+      return a.canonicalName.localeCompare(b.canonicalName);
     case "category_asc":
-      return [{ category: "asc" }, { canonicalName: "asc" }];
+      return a.category.localeCompare(b.category) || a.canonicalName.localeCompare(b.canonicalName);
     case "usage_desc":
     default:
-      return [{ recipeIngredients: { _count: "desc" } }, { canonicalName: "asc" }];
+      return b.usageCount - a.usageCount || a.canonicalName.localeCompare(b.canonicalName);
   }
 }
 
@@ -37,11 +43,24 @@ export interface IngredientReviewResult {
 /**
  * Paginated, searchable, sortable ingredient list for the one-time manual
  * review page (name/merge cleanup, category, packaged-unit sizing,
- * shopping-list substitution notes). Defaults to usage count descending
- * so the highest-impact ingredients (the ones appearing in the most
- * recipes) get reviewed first — see IngredientSortOption for the other
- * options, including ascending usage to surface the opposite end (rare,
- * likely-duplicate ingredients worth double-checking).
+ * shopping-list substitution notes). Defaults to usage count descending so
+ * the highest-impact ingredients get reviewed first — see
+ * IngredientSortOption for the other options, including ascending usage
+ * to surface likely-duplicate stragglers.
+ *
+ * "Usage" here means recipes that would actually appear in the app
+ * (isBrowsable, not isHidden — the same filter buildWhere applies to
+ * browse/suggest/pantry-match), not a raw count of every scraped
+ * RecipeIngredient row. HelloFresh's catalog carries a lot of dead weight
+ * — draft/test/removed recipes that never show up anywhere a user would
+ * actually see them (see Recipe.isBrowsable's doc comment) — and counting
+ * those inflated even the most common ingredients by ~30% in a spot check
+ * (e.g. "water": 9627 raw rows, only 6795 from a recipe anyone would ever
+ * browse to). totalUsageCount carries the raw figure alongside so a
+ * reviewer can see when the two diverge, rather than silently hiding it.
+ * Sorted/paginated in memory rather than at the DB level — Prisma's
+ * relation _count aggregation used for orderBy can't be given a filter,
+ * and even the full ~1,400-ingredient catalog is trivial to sort in JS.
  */
 export async function listIngredientsForReview(
   params: IngredientReviewParams = {},
@@ -53,7 +72,7 @@ export async function listIngredientsForReview(
     ? { canonicalName: { contains: params.search, mode: "insensitive" } }
     : {};
 
-  const [ingredients, total] = await Promise.all([
+  const [ingredients, realUsageCounts, totalUsageCounts] = await Promise.all([
     prisma.ingredient.findMany({
       where,
       select: {
@@ -64,21 +83,39 @@ export async function listIngredientsForReview(
         packagedUnitQuantity: true,
         packagedUnitBase: true,
         shoppingListNote: true,
-        _count: { select: { recipeIngredients: true } },
       },
-      orderBy: buildOrderBy(params.sort),
-      skip: (page - 1) * pageSize,
-      take: pageSize,
     }),
-    prisma.ingredient.count({ where }),
+    prisma.recipeIngredient.groupBy({
+      by: ["ingredientId"],
+      where: { recipe: { isBrowsable: true, isHidden: false } },
+      _count: { _all: true },
+    }),
+    prisma.recipeIngredient.groupBy({
+      by: ["ingredientId"],
+      _count: { _all: true },
+    }),
   ]);
+
+  const realUsageById = new Map(realUsageCounts.map((r) => [r.ingredientId, r._count._all]));
+  const totalUsageById = new Map(totalUsageCounts.map((r) => [r.ingredientId, r._count._all]));
+
+  const allRows = ingredients.map((i) => ({
+    ...i,
+    usageCount: realUsageById.get(i.id) ?? 0,
+    totalUsageCount: totalUsageById.get(i.id) ?? 0,
+  }));
+  allRows.sort((a, b) => compareRows(params.sort, a, b));
+
+  const total = allRows.length;
+  const pageRows = allRows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
   // A separate groupBy rather than a nested relation select — this only
   // needs distinct unit strings per ingredient, not one row per (of
-  // potentially hundreds of) RecipeIngredient usages.
+  // potentially hundreds of) RecipeIngredient usages. Only for the current
+  // page's ingredients, unlike the usage counts above.
   const unitRows = await prisma.recipeIngredient.groupBy({
     by: ["ingredientId", "unit"],
-    where: { ingredientId: { in: ingredients.map((i) => i.id) }, unit: { not: null } },
+    where: { ingredientId: { in: pageRows.map((i) => i.id) }, unit: { not: null } },
   });
   const unitsByIngredientId = new Map<string, string[]>();
   for (const row of unitRows) {
@@ -88,7 +125,7 @@ export async function listIngredientsForReview(
     else unitsByIngredientId.set(row.ingredientId, [row.unit]);
   }
 
-  const rows: IngredientReviewRow[] = ingredients.map((i) => ({
+  const rows: IngredientReviewRow[] = pageRows.map((i) => ({
     id: i.id,
     canonicalName: i.canonicalName,
     category: i.category,
@@ -96,7 +133,8 @@ export async function listIngredientsForReview(
     packagedUnitQuantity: i.packagedUnitQuantity,
     packagedUnitBase: i.packagedUnitBase,
     shoppingListNote: i.shoppingListNote,
-    usageCount: i._count.recipeIngredients,
+    usageCount: i.usageCount,
+    totalUsageCount: i.totalUsageCount,
     unitsSeen: (unitsByIngredientId.get(i.id) ?? []).sort(),
   }));
 

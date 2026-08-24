@@ -71,7 +71,17 @@ function Row({ row }: { row: IngredientReviewRow }) {
           className={`w-96 capitalize ${fieldClass}`}
         />
       </td>
-      <td className="px-3 py-2 text-sm text-zinc-500">{row.usageCount}</td>
+      <td className="px-3 py-2 text-sm text-zinc-500">
+        {row.usageCount}
+        {row.totalUsageCount > row.usageCount && (
+          <span
+            className="ml-1 text-xs text-zinc-400"
+            title="The rest are from recipes that never actually show up in the app (draft/test/removed)"
+          >
+            ({row.totalUsageCount} total)
+          </span>
+        )}
+      </td>
       <td className="px-3 py-2">
         <select
           value={category}
@@ -156,7 +166,9 @@ export default function IngredientReviewTable({ rows }: { rows: IngredientReview
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
             <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2">Uses</th>
+            <th className="px-3 py-2" title="Only counts recipes that actually appear in the app (not draft/test/removed)">
+              Uses
+            </th>
             <th className="px-3 py-2">Category</th>
             <th className="px-3 py-2">Packaged unit</th>
             <th className="px-3 py-2">Qty</th>

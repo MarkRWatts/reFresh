@@ -44,7 +44,9 @@ export default async function IngredientReviewPage({
         Fix HelloFresh&rsquo;s naming inconsistencies, tag categories, and record real pack sizes
         (&ldquo;1 pot&rdquo; of soured cream is 150ml) so the shopping list totals correctly.
         Renaming an ingredient to match an existing one merges them together. Defaults to most-used
-        first, so the highest-impact ingredients get reviewed first.
+        first, so the highest-impact ingredients get reviewed first — &ldquo;Uses&rdquo; only counts
+        recipes that actually appear in the app, not HelloFresh&rsquo;s draft/test/removed dead
+        weight, so that ranking isn&rsquo;t skewed by recipes no one will ever see.
       </p>
 
       <div className="mt-4">

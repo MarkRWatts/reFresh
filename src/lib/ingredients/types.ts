@@ -28,7 +28,10 @@ export interface IngredientReviewRow {
   packagedUnitQuantity: number | null;
   packagedUnitBase: string | null;
   shoppingListNote: string | null;
+  /** Uses in recipes that actually appear in the app (isBrowsable, not isHidden) — see listIngredientsForReview. */
   usageCount: number;
+  /** Every RecipeIngredient row regardless of the recipe's browsable/hidden status — shown alongside usageCount only when they differ, so a reviewer can see how much of an ingredient's apparent frequency is HelloFresh dead weight (draft/test/removed recipes) rather than real usage. */
+  totalUsageCount: number;
   /** Distinct raw RecipeIngredient.unit values seen for this ingredient — shown as suggestions so the reviewer doesn't have to cross-reference actual recipes to know what to type into packagedUnit. */
   unitsSeen: string[];
 }
