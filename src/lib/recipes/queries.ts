@@ -217,6 +217,95 @@ export async function markRecipesSuggested(recipeIds: string[]): Promise<void> {
   });
 }
 
+export interface RecipeMatch {
+  recipe: RecipeSummary;
+  /** How many of the recipe's ingredients are in the user's set. */
+  matchCount: number;
+  /** Total ingredients the recipe uses. */
+  totalCount: number;
+  /** Canonical names of the recipe's ingredients NOT in the user's set, alphabetical. */
+  missingIngredientNames: string[];
+}
+
+export interface RecipeMatchResult {
+  matches: RecipeMatch[];
+  /** Size of the candidate pool before the results cap — lets the caller note "showing N of M". */
+  poolSize: number;
+}
+
+// Loaded in full (like listRecipeIngredientSetsForSuggestion's pool) rather
+// than scored in SQL — coverage math is simplest done in JS once a recipe's
+// ingredient set is in memory, and buildWhere already narrows the query to
+// recipes that use at least one selected ingredient, so this pool is small.
+const MATCH_POOL_CAP = 1000;
+const MATCH_RESULTS_CAP = 60;
+
+/**
+ * Ranks recipes by how much of their ingredient list is covered by
+ * `ingredientIds` (the "what can I make?" pantry-match page) — highest
+ * coverage first, ties broken by fewest missing ingredients then rating.
+ * Reuses buildWhere so pantry matches respect whatever protein/cuisine/
+ * time/calorie filters are active, same as /suggest's candidate pool.
+ * Recipes that don't use any of the given ingredients are excluded outright
+ * rather than ranked last, since a 0% match isn't a useful suggestion.
+ */
+export async function matchRecipesByIngredients(
+  ingredientIds: string[],
+  params: RecipeListParams,
+): Promise<RecipeMatchResult> {
+  if (ingredientIds.length === 0) return { matches: [], poolSize: 0 };
+
+  const haveIds = new Set(ingredientIds);
+  const where = buildWhere(params);
+  where.ingredients = { some: { ingredientId: { in: ingredientIds } } };
+
+  const recipes = await prisma.recipe.findMany({
+    where,
+    select: {
+      ...RECIPE_SUMMARY_SELECT,
+      ingredients: { select: { ingredient: { select: { id: true, canonicalName: true } } } },
+    },
+    take: MATCH_POOL_CAP,
+  });
+
+  const matches: RecipeMatch[] = recipes.map(({ ingredients, ...summary }) => {
+    const missing = ingredients.filter((i) => !haveIds.has(i.ingredient.id));
+    return {
+      recipe: summary,
+      matchCount: ingredients.length - missing.length,
+      totalCount: ingredients.length,
+      missingIngredientNames: missing.map((i) => i.ingredient.canonicalName).sort(),
+    };
+  });
+
+  matches.sort((a, b) => {
+    const coverageA = a.totalCount > 0 ? a.matchCount / a.totalCount : 0;
+    const coverageB = b.totalCount > 0 ? b.matchCount / b.totalCount : 0;
+    if (coverageA !== coverageB) return coverageB - coverageA;
+    if (a.missingIngredientNames.length !== b.missingIngredientNames.length) {
+      return a.missingIngredientNames.length - b.missingIngredientNames.length;
+    }
+    return (b.recipe.ratingValue ?? 0) - (a.recipe.ratingValue ?? 0);
+  });
+
+  return { matches: matches.slice(0, MATCH_RESULTS_CAP), poolSize: matches.length };
+}
+
+/** Resolves ingredient ids (e.g. from the `?ingredients=` URL param) to their canonical names, for rendering chips — silently drops any id that no longer exists. */
+export async function getIngredientsByIds(
+  ids: string[],
+): Promise<{ id: string; canonicalName: string }[]> {
+  if (ids.length === 0) return [];
+  const ingredients = await prisma.ingredient.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, canonicalName: true },
+  });
+  // Preserve URL order rather than whatever order the DB returns, so chips
+  // don't reshuffle as the user adds more.
+  const byId = new Map(ingredients.map((i) => [i.id, i]));
+  return ids.map((id) => byId.get(id)).filter((i): i is { id: string; canonicalName: string } => i != null);
+}
+
 /** Distinct cuisine values present in the DB, for populating a cuisine filter. */
 export async function listCuisines(): Promise<string[]> {
   const rows = await prisma.recipe.findMany({

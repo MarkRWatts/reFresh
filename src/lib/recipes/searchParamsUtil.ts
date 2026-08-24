@@ -36,6 +36,8 @@ export interface ParsedFilters {
   showAll: boolean;
   sort: SortOption;
   page: number;
+  /** Canonical ingredient ids selected on the pantry-match page (`ingredients=` param) — unused by the browse/suggest pages, but carried through here so FilterBar's shared navigate() doesn't drop them when a filter changes on /pantry. */
+  ingredientIds: string[];
 }
 
 /** Parses the raw Next.js searchParams object into typed filter state, silently dropping anything malformed rather than erroring the page. */
@@ -70,6 +72,7 @@ export function parseFilters(raw: RawSearchParams): ParsedFilters {
     showAll: first(raw.all) === "1",
     sort,
     page,
+    ingredientIds: (first(raw.ingredients) ?? "").split(",").filter(Boolean),
   };
 }
 
@@ -99,6 +102,9 @@ export function buildFilterQueryString(
   const params = new URLSearchParams();
   if (filters.proteinTypes && filters.proteinTypes.length > 0) {
     params.set("protein", filters.proteinTypes.join(","));
+  }
+  if (filters.ingredientIds && filters.ingredientIds.length > 0) {
+    params.set("ingredients", filters.ingredientIds.join(","));
   }
   if (filters.cuisine) params.set("cuisine", filters.cuisine);
   if (filters.minCalories != null) params.set("minCal", String(filters.minCalories));

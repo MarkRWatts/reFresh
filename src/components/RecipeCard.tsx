@@ -17,12 +17,21 @@ function Badge({ className, children }: { className: string; children: React.Rea
   );
 }
 
+export interface RecipeCardMatch {
+  matchCount: number;
+  totalCount: number;
+  missingIngredientNames: string[];
+}
+
 export default function RecipeCard({
   recipe,
   inPlan,
+  match,
 }: {
   recipe: RecipeSummary;
   inPlan: boolean;
+  /** Pantry-match info from matchRecipesByIngredients — renders a coverage badge and, when the recipe isn't fully covered, a "missing: ..." line. */
+  match?: RecipeCardMatch;
 }) {
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white transition-shadow hover:shadow-md">
@@ -60,6 +69,17 @@ export default function RecipeCard({
         </div>
 
         <div className="mt-auto flex flex-wrap gap-1.5">
+          {match && (
+            <Badge
+              className={
+                match.matchCount === match.totalCount
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+              }
+            >
+              {match.matchCount}/{match.totalCount} ingredients
+            </Badge>
+          )}
           {recipe.isPdfImport && (
             <Badge className="border-sky-200 bg-sky-50 text-sky-700">
               <FileText className="h-3 w-3" /> Imported
@@ -87,6 +107,12 @@ export default function RecipeCard({
             </Badge>
           )}
         </div>
+
+        {match && match.missingIngredientNames.length > 0 && (
+          <p className="line-clamp-1 text-xs capitalize text-zinc-500">
+            Missing: {match.missingIngredientNames.join(", ")}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { FileText, Sparkles } from "lucide-react";
+import { Carrot, FileText, Sparkles } from "lucide-react";
 import Link from "next/link";
 import FilterBar from "@/components/FilterBar";
 import Pagination from "@/components/Pagination";
@@ -50,6 +50,13 @@ export default async function Home({
             >
               <Sparkles className="h-3.5 w-3.5" />
               Suggest a week
+            </Link>
+            <Link
+              href="/pantry"
+              className="flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 hover:border-zinc-400"
+            >
+              <Carrot className="h-3.5 w-3.5" />
+              What can I make?
             </Link>
           </div>
         </div>
