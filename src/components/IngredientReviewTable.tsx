@@ -51,9 +51,12 @@ function Row({ row }: { row: IngredientReviewRow }) {
     const unit = next.unit ?? packagedUnit;
     const quantity = next.quantity ?? packagedUnitQuantity;
     const base = next.base ?? packagedUnitBase;
+    // Blank or unparseable (e.g. mid-edit "1.") -> "not set" rather than
+    // writing NaN — same convention as formFields.ts's numberField.
+    const parsedQuantity = quantity.trim() ? Number(quantity) : NaN;
     updateIngredientPackaging(row.id, {
       packagedUnit: unit.trim() || null,
-      packagedUnitQuantity: quantity.trim() ? Number(quantity) : null,
+      packagedUnitQuantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
       packagedUnitBase: base || null,
     });
   }
@@ -103,11 +106,12 @@ function Row({ row }: { row: IngredientReviewRow }) {
       </td>
       <td className="px-3 py-2">
         <input
-          type="number"
-          step="any"
+          type="text"
+          inputMode="decimal"
           value={packagedUnitQuantity}
           onChange={(e) => setPackagedUnitQuantity(e.target.value)}
           onBlur={() => savePackaging({ quantity: packagedUnitQuantity })}
+          placeholder="e.g. 150"
           className={`w-20 ${fieldClass}`}
         />
       </td>
