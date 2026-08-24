@@ -1,4 +1,3 @@
-import { ListChecks } from "lucide-react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Image from "next/image";
@@ -49,14 +48,6 @@ export default function RootLayout({
                 className="h-4 w-auto sm:h-6 md:h-7"
                 priority
               />
-            </Link>
-            <Link
-              href="/ingredients/review"
-              title="Ingredient review"
-              className="ml-auto mr-3 flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-700"
-            >
-              <ListChecks className="h-4 w-4" />
-              <span className="hidden sm:inline">Ingredients</span>
             </Link>
             <PlanDrawerRoot />
           </div>
