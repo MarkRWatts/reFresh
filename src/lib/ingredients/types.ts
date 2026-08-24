@@ -27,6 +27,7 @@ export interface IngredientReviewRow {
   packagedUnit: string | null;
   packagedUnitQuantity: number | null;
   packagedUnitBase: string | null;
+  packagedUnitBaseGrams: number | null;
   shoppingListNote: string | null;
   /** Uses in recipes that actually appear in the app (isBrowsable, not isHidden) — see listIngredientsForReview. */
   usageCount: number;

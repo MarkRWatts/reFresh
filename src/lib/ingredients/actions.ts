@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import type { IngredientCategory } from "@/generated/prisma/client";
 import { canonicalizeIngredientName } from "@/lib/scraper/ingredientNormalize";
-import { normalizeUnitLabel } from "./unitSynonyms";
+import { isPackagedUnitMention, normalizeUnitLabel } from "./unitSynonyms";
 
 const REVIEW_PATH = "/ingredients/review";
 
@@ -61,6 +61,7 @@ export interface PackagingUpdate {
   packagedUnit: string | null;
   packagedUnitQuantity: number | null;
   packagedUnitBase: string | null;
+  packagedUnitBaseGrams: number | null;
 }
 
 export async function updateIngredientPackaging(id: string, data: PackagingUpdate): Promise<void> {
@@ -127,7 +128,8 @@ export async function rebaseIngredientToPackagedBase(ingredientId: string): Prom
   const ingredient = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
   if (!ingredient?.packagedUnitBase || ingredient.packagedUnitQuantity == null) return 0;
   const base = ingredient.packagedUnitBase;
-  const otherBase = base === "g" ? "ml" : base === "ml" ? "g" : null;
+  const normalizedBase = normalizeUnitLabel(base);
+  const otherBase = normalizedBase === "g" ? "ml" : normalizedBase === "ml" ? "g" : null;
   const ambiguityThreshold = ingredient.packagedUnitQuantity * 0.1;
 
   const usages = await prisma.recipeIngredient.findMany({
@@ -152,7 +154,8 @@ export async function rebaseIngredientToPackagedBase(ingredientId: string): Prom
 
 /**
  * Bulk-converts every recipe that records this ingredient directly in
- * its packaged unit (e.g. "1 pot") into the base measure by multiplying
+ * its packaged unit, or HelloFresh's generic "sachet(s)" label for one
+ * (e.g. "1 pot"), into the base measure by multiplying
  * out — "1 pot" of a 150ml pack becomes "150ml". Unlike
  * rebaseIngredientToPackagedBase this changes the number, not just the
  * label, but it's still fully deterministic (no rounding/judgment
@@ -170,10 +173,11 @@ export async function convertPackagedUnitMentionsToBase(ingredientId: string): P
     return 0;
   }
 
-  const usages = await prisma.recipeIngredient.findMany({
-    where: { ingredientId, quantity: { not: null }, unit: { equals: ingredient.packagedUnit, mode: "insensitive" } },
-    select: { id: true, quantity: true },
+  const candidates = await prisma.recipeIngredient.findMany({
+    where: { ingredientId, quantity: { not: null } },
+    select: { id: true, quantity: true, unit: true },
   });
+  const usages = candidates.filter((u) => isPackagedUnitMention(u.unit, ingredient.packagedUnit!));
   if (usages.length === 0) return 0;
 
   await Promise.all(
@@ -186,4 +190,45 @@ export async function convertPackagedUnitMentionsToBase(ingredientId: string): P
   );
   revalidatePath(`/ingredients/review/${ingredientId}/convert`);
   return usages.length;
+}
+
+/**
+ * Bulk-converts every recipe currently recording this ingredient in grams
+ * into packagedUnitBase, using packagedUnitBaseGrams — a per-ingredient
+ * fact ("15g = 1 tbsp of honey", derived by a human cross-referencing
+ * overlapping gram/base-unit data for this exact ingredient, see
+ * getIngredientConversionReview's "gram-ratio-known" bucket) rather than
+ * the generic ~1g≈1ml density guess rebaseIngredientToPackagedBase uses.
+ *
+ * Deliberately no magnitude threshold here: a ratio derived from small
+ * (e.g. tablespoon-scale) amounts isn't guaranteed to hold at a very
+ * different scale (plain flour's 8g≈1tbsp held for dredging amounts but
+ * not for 75g+ baking amounts, which turned out to be weighed on a scale
+ * instead) — that judgment call is left to whoever reviews the table
+ * before clicking this, not encoded as a rule. Skip individually-odd rows
+ * via the per-row Apply button instead.
+ */
+export async function applyGramRatioConversion(ingredientId: string): Promise<number> {
+  const ingredient = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
+  if (!ingredient?.packagedUnitBase || ingredient.packagedUnitBaseGrams == null) return 0;
+  const normalizedBase = normalizeUnitLabel(ingredient.packagedUnitBase);
+  if (normalizedBase === "g" || normalizedBase === "ml") return 0;
+
+  const usages = await prisma.recipeIngredient.findMany({
+    where: { ingredientId, quantity: { not: null } },
+    select: { id: true, quantity: true, unit: true },
+  });
+  const toConvert = usages.filter((u) => normalizeUnitLabel(u.unit) === "g");
+  if (toConvert.length === 0) return 0;
+
+  await Promise.all(
+    toConvert.map((u) =>
+      prisma.recipeIngredient.update({
+        where: { id: u.id },
+        data: { quantity: u.quantity! / ingredient.packagedUnitBaseGrams!, unit: ingredient.packagedUnitBase! },
+      }),
+    ),
+  );
+  revalidatePath(`/ingredients/review/${ingredientId}/convert`);
+  return toConvert.length;
 }

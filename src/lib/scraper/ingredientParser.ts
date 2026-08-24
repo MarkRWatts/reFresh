@@ -1,3 +1,5 @@
+import { normalizeUnitLabel } from "@/lib/ingredients/unitSynonyms";
+
 export interface ParsedIngredientLine {
   quantity: number | null;
   unit: string | null;
@@ -109,8 +111,14 @@ const UNIT_WORD_SET = new Set(UNIT_WORDS.map((u) => u.toLowerCase()));
 // instead of being combined into one.
 const PLACEHOLDER_UNIT_WORDS = new Set(["unit(s)", "units", "unit"]);
 
+// Folds spelling variants (e.g. "grams"/"pot(s)"/"tablespoons") down to one
+// canonical form at the source, so RecipeIngredient.unit is stored already
+// normalized instead of needing normalizeUnitLabel() re-applied at every
+// read site. Shares the same table those read sites use (unitSynonyms.ts)
+// so parsing and reading can never drift out of sync with each other.
 function normalizeUnit(unit: string | null): string | null {
-  return unit !== null && PLACEHOLDER_UNIT_WORDS.has(unit) ? null : unit;
+  if (unit !== null && PLACEHOLDER_UNIT_WORDS.has(unit)) return null;
+  return normalizeUnitLabel(unit);
 }
 
 // The full Unicode "Number Forms" set of vulgar fractions, not just the

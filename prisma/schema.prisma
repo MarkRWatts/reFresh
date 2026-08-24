@@ -174,10 +174,25 @@ model Ingredient {
   // sharedIngredients.ts). Filled in by manual research on the ingredient
   // review page — HelloFresh's scraped data never states real pack sizes.
   packagedUnit         String?
-  // How many packagedUnitBase (grams or millilitres) one packagedUnit
-  // equals — e.g. 150 for a "pot(s)" of soured cream measured in "ml".
+  // How many packagedUnitBase one packagedUnit equals — e.g. 150 for a
+  // "pot(s)" of soured cream measured in "ml".
   packagedUnitQuantity Float?
-  packagedUnitBase     String? // "g" or "ml"
+  // The precise, scalable unit recipes get normalized to — usually "g" or
+  // "ml", but can be any real measuring unit (e.g. "tbsp", "bunch") when
+  // that's genuinely how the ingredient is used/measured (see
+  // packagedUnitBaseGrams below for that case).
+  packagedUnitBase     String?
+  // Only set when packagedUnitBase isn't itself "g" or "ml": how many
+  // grams equal one packagedUnitBase unit (e.g. 15 for honey's "tbsp", 10
+  // for coriander's "bunch") — lets a recipe recorded in grams be
+  // converted to the real measuring unit instead of relabeled as an
+  // implausible tiny gram amount. Always a fact derived by a human
+  // cross-referencing overlapping gram/base-unit data for THIS ingredient
+  // (see getIngredientConversionReview's "gram-ratio-known" bucket) —
+  // never inferred automatically, since a single ratio isn't guaranteed to
+  // hold at every quantity scale (a spoon-measured ratio doesn't apply to
+  // a baking-scale amount of the same ingredient).
+  packagedUnitBaseGrams Float?
   // Free-text substitution guidance for a HelloFresh-proprietary
   // blend/product with no single real-world supermarket equivalent (e.g.
   // "Central American Style Spice Mix") — shown on the shopping list next

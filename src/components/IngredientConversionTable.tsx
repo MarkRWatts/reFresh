@@ -8,13 +8,14 @@ import type { ConversionCandidateRow } from "@/lib/ingredients/conversionQueries
 
 interface IngredientInfo {
   id: string;
-  packagedUnit: string;
+  packagedUnit: string | null;
 }
 
 const MATCH_TYPE_LABEL: Record<string, string> = {
   "already-base": "Already in the base unit",
   "other-unit": "Different unit — not handled here",
   "no-quantity": "No quantity recorded",
+  "no-packaging": "No packaging defined yet",
 };
 
 function formatQuantity(row: ConversionCandidateRow): string {
@@ -31,7 +32,10 @@ function Row({ row, ingredient }: { row: ConversionCandidateRow; ingredient: Ing
   }
 
   const isActionable =
-    row.matchType === "missing-unit" || row.matchType === "density-assumed" || row.matchType === "packaged-unit-mention";
+    row.matchType === "missing-unit" ||
+    row.matchType === "density-assumed" ||
+    row.matchType === "packaged-unit-mention" ||
+    row.matchType === "gram-ratio-known";
 
   return (
     <tr className="border-t border-zinc-100">
@@ -78,7 +82,7 @@ function Row({ row, ingredient }: { row: ConversionCandidateRow; ingredient: Ing
               type="button"
               onClick={() => apply(row.alternateQuantity!, row.suggestedUnit!)}
               className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:border-zinc-400"
-              title={`Treat the bare number as a count of ${ingredient.packagedUnit}`}
+              title={`Treat the bare number as a count of ${ingredient.packagedUnit ?? ""}`}
             >
               {row.quantity} {ingredient.packagedUnit} = {row.alternateQuantity} {row.suggestedUnit}
             </button>

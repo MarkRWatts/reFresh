@@ -22,9 +22,19 @@ const INVARIANT_WORDS_ENDING_IN_S = new Set([
 // same kind of qualifier but isn't: "English Mustard" is a genuinely
 // different product from plain "Mustard" (a specific hot condiment, not a
 // provenance label), so it's excluded despite the superficial pattern
-// match. Same reasoning excludes prep-state words like "diced" or
-// "minced", which sometimes name a different purchasable product (mince
-// vs. steak) rather than just describing one.
+// match.
+//
+// Deliberately does NOT include prep-state words ("diced", "minced",
+// "sliced", "chopped", ...) even though they superficially look like the
+// same kind of qualifier. Confirmed during a data-cleanup pass: a prep
+// word can name a genuinely different purchasable product, not just
+// describe the same one differently — e.g. "diced chicken breast" is
+// bought/measured by weight (you dice to hit a gram target) while whole
+// "chicken breast" is often bought/measured per-person-count (one whole
+// breast per portion), and merging them loses that distinction. If you're
+// tempted to add a prep word here, validate it against real scraped data
+// the same way "British"/"free-range" were validated, not by
+// pattern-matching against this list's existing entries.
 const ORIGIN_QUALIFIER_PREFIXES = [
   "rspca assured",
   "free-range",

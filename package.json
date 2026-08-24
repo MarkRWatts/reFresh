@@ -13,6 +13,7 @@
     "reprocess": "tsx scripts/scrape.ts --force",
     "detect-variants": "tsx scripts/detect-variants.ts",
     "merge-ingredients": "tsx scripts/merge-ingredients.ts",
+    "detect-ingredient-merges": "tsx scripts/detect-ingredient-merges.ts",
     "reparse-ingredient-lines": "tsx scripts/reparse-ingredient-lines.ts",
     "delete-unused-ingredients": "tsx scripts/delete-unused-ingredients.ts",
     "import-pdf": "tsx scripts/import-pdf.ts",

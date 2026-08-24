@@ -11,7 +11,7 @@ import {
 } from "@/lib/ingredients/actions";
 import { INGREDIENT_CATEGORY_OPTIONS, type IngredientReviewRow } from "@/lib/ingredients/types";
 
-const PACKAGED_UNIT_BASE_OPTIONS = ["g", "ml"];
+const COMMON_BASE_UNITS = ["g", "ml", "tbsp", "tsp"];
 
 const fieldClass = "rounded border border-zinc-200 px-2 py-1 text-sm";
 
@@ -23,13 +23,16 @@ function Row({ row }: { row: IngredientReviewRow }) {
     row.packagedUnitQuantity != null ? String(row.packagedUnitQuantity) : "",
   );
   const [packagedUnitBase, setPackagedUnitBase] = useState(row.packagedUnitBase ?? "");
+  const [packagedUnitBaseGrams, setPackagedUnitBaseGrams] = useState(
+    row.packagedUnitBaseGrams != null ? String(row.packagedUnitBaseGrams) : "",
+  );
   const [note, setNote] = useState(row.shoppingListNote ?? "");
   const [mergedInto, setMergedInto] = useState<string | null>(null);
 
   if (mergedInto) {
     return (
       <tr className="border-t border-zinc-100">
-        <td colSpan={8} className="px-3 py-2 text-sm text-zinc-500">
+        <td colSpan={9} className="px-3 py-2 text-sm text-zinc-500">
           <span className="italic">&ldquo;{row.canonicalName}&rdquo;</span> merged into{" "}
           <span className="font-medium capitalize">{mergedInto}</span>.
         </td>
@@ -48,17 +51,20 @@ function Row({ row }: { row: IngredientReviewRow }) {
     else setName(trimmed);
   }
 
-  function savePackaging(next: { unit?: string; quantity?: string; base?: string }) {
+  function savePackaging(next: { unit?: string; quantity?: string; base?: string; baseGrams?: string }) {
     const unit = next.unit ?? packagedUnit;
     const quantity = next.quantity ?? packagedUnitQuantity;
     const base = next.base ?? packagedUnitBase;
+    const baseGrams = next.baseGrams ?? packagedUnitBaseGrams;
     // Blank or unparseable (e.g. mid-edit "1.") -> "not set" rather than
     // writing NaN — same convention as formFields.ts's numberField.
     const parsedQuantity = quantity.trim() ? Number(quantity) : NaN;
+    const parsedBaseGrams = baseGrams.trim() ? Number(baseGrams) : NaN;
     updateIngredientPackaging(row.id, {
       packagedUnit: unit.trim() || null,
       packagedUnitQuantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
       packagedUnitBase: base || null,
+      packagedUnitBaseGrams: Number.isFinite(parsedBaseGrams) ? parsedBaseGrams : null,
     });
   }
 
@@ -127,21 +133,31 @@ function Row({ row }: { row: IngredientReviewRow }) {
         />
       </td>
       <td className="px-3 py-2">
-        <select
+        <input
+          list={`base-units-${row.id}`}
           value={packagedUnitBase}
-          onChange={(e) => {
-            setPackagedUnitBase(e.target.value);
-            savePackaging({ base: e.target.value });
-          }}
-          className={fieldClass}
-        >
-          <option value="">—</option>
-          {PACKAGED_UNIT_BASE_OPTIONS.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
+          onChange={(e) => setPackagedUnitBase(e.target.value)}
+          onBlur={() => savePackaging({ base: packagedUnitBase })}
+          placeholder="g"
+          className={`w-20 ${fieldClass}`}
+        />
+        <datalist id={`base-units-${row.id}`}>
+          {COMMON_BASE_UNITS.map((u) => (
+            <option key={u} value={u} />
           ))}
-        </select>
+        </datalist>
+      </td>
+      <td className="px-3 py-2">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={packagedUnitBaseGrams}
+          onChange={(e) => setPackagedUnitBaseGrams(e.target.value)}
+          onBlur={() => savePackaging({ baseGrams: packagedUnitBaseGrams })}
+          placeholder="e.g. 15"
+          title="Only needed when the base unit above isn't g/ml — how many grams equal one of it (e.g. 15 for a tbsp of honey)"
+          className={`w-20 ${fieldClass}`}
+        />
       </td>
       <td className="px-3 py-2">
         <input
@@ -153,13 +169,9 @@ function Row({ row }: { row: IngredientReviewRow }) {
         />
       </td>
       <td className="px-3 py-2 text-sm">
-        {packagedUnit.trim() && packagedUnitQuantity.trim() && packagedUnitBase ? (
-          <Link href={`/ingredients/review/${row.id}/convert`} className="text-emerald-700 hover:underline">
-            Review recipes →
-          </Link>
-        ) : (
-          <span className="text-xs text-zinc-300">Set packaging first</span>
-        )}
+        <Link href={`/ingredients/review/${row.id}/convert`} className="text-emerald-700 hover:underline">
+          Review recipes →
+        </Link>
       </td>
     </tr>
   );
@@ -183,6 +195,9 @@ export default function IngredientReviewTable({ rows }: { rows: IngredientReview
             <th className="px-3 py-2">Packaged unit</th>
             <th className="px-3 py-2">Qty</th>
             <th className="px-3 py-2">Base</th>
+            <th className="px-3 py-2" title="Only needed when Base isn't g/ml — grams per one Base unit (e.g. 15 for a tbsp of honey)">
+              Base grams
+            </th>
             <th className="px-3 py-2">Substitution note</th>
             <th
               className="px-3 py-2"
