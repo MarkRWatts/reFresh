@@ -1,16 +1,31 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import type { IngredientReviewRow } from "./types";
+import type { IngredientReviewRow, IngredientSortOption } from "./types";
 
 export type { IngredientReviewRow } from "./types";
 
 export interface IngredientReviewParams {
   search?: string;
+  sort?: IngredientSortOption;
   page?: number;
   pageSize?: number;
 }
 
 const DEFAULT_PAGE_SIZE = 50;
+
+function buildOrderBy(sort: IngredientSortOption | undefined): Prisma.IngredientOrderByWithRelationInput[] {
+  switch (sort) {
+    case "usage_asc":
+      return [{ recipeIngredients: { _count: "asc" } }, { canonicalName: "asc" }];
+    case "name_asc":
+      return [{ canonicalName: "asc" }];
+    case "category_asc":
+      return [{ category: "asc" }, { canonicalName: "asc" }];
+    case "usage_desc":
+    default:
+      return [{ recipeIngredients: { _count: "desc" } }, { canonicalName: "asc" }];
+  }
+}
 
 export interface IngredientReviewResult {
   rows: IngredientReviewRow[];
@@ -20,11 +35,13 @@ export interface IngredientReviewResult {
 }
 
 /**
- * Paginated, searchable ingredient list for the one-time manual review
- * page (name/merge cleanup, category, packaged-unit sizing, shopping-list
- * substitution notes) — sorted by usage count descending by default so the
- * highest-impact ingredients (the ones appearing in the most recipes) get
- * reviewed first.
+ * Paginated, searchable, sortable ingredient list for the one-time manual
+ * review page (name/merge cleanup, category, packaged-unit sizing,
+ * shopping-list substitution notes). Defaults to usage count descending
+ * so the highest-impact ingredients (the ones appearing in the most
+ * recipes) get reviewed first — see IngredientSortOption for the other
+ * options, including ascending usage to surface the opposite end (rare,
+ * likely-duplicate ingredients worth double-checking).
  */
 export async function listIngredientsForReview(
   params: IngredientReviewParams = {},
@@ -49,7 +66,7 @@ export async function listIngredientsForReview(
         shoppingListNote: true,
         _count: { select: { recipeIngredients: true } },
       },
-      orderBy: [{ recipeIngredients: { _count: "desc" } }, { canonicalName: "asc" }],
+      orderBy: buildOrderBy(params.sort),
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

@@ -3,8 +3,10 @@ import BackLink from "@/components/BackLink";
 import IngredientReviewSearch from "@/components/IngredientReviewSearch";
 import IngredientReviewTable from "@/components/IngredientReviewTable";
 import { listIngredientsForReview } from "@/lib/ingredients/queries";
+import { INGREDIENT_SORT_OPTIONS, type IngredientSortOption } from "@/lib/ingredients/types";
 
 const PAGE_SIZE = 50;
+const VALID_SORTS = INGREDIENT_SORT_OPTIONS.map((o) => o.value);
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -17,14 +19,17 @@ export default async function IngredientReviewPage({
 }) {
   const raw = await searchParams;
   const search = first(raw.q) || undefined;
+  const sortRaw = first(raw.sort);
+  const sort = (VALID_SORTS.includes(sortRaw as IngredientSortOption) ? sortRaw : "usage_desc") as IngredientSortOption;
   const page = Math.max(1, Number.parseInt(first(raw.page) ?? "1", 10) || 1);
 
-  const { rows, total, pageSize } = await listIngredientsForReview({ search, page, pageSize: PAGE_SIZE });
+  const { rows, total, pageSize } = await listIngredientsForReview({ search, sort, page, pageSize: PAGE_SIZE });
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
+    if (sort !== "usage_desc") params.set("sort", sort);
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     return `/ingredients/review${qs ? `?${qs}` : ""}`;
@@ -38,12 +43,12 @@ export default async function IngredientReviewPage({
       <p className="mt-1 max-w-2xl text-sm text-zinc-500">
         Fix HelloFresh&rsquo;s naming inconsistencies, tag categories, and record real pack sizes
         (&ldquo;1 pot&rdquo; of soured cream is 150ml) so the shopping list totals correctly.
-        Renaming an ingredient to match an existing one merges them together. Sorted by how many
-        recipes use each ingredient, so the highest-impact ones come first.
+        Renaming an ingredient to match an existing one merges them together. Defaults to most-used
+        first, so the highest-impact ingredients get reviewed first.
       </p>
 
       <div className="mt-4">
-        <IngredientReviewSearch initialValue={search ?? ""} />
+        <IngredientReviewSearch initialValue={search ?? ""} initialSort={sort} />
       </div>
 
       <p className="mt-3 text-sm text-zinc-500">
