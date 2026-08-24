@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { IngredientCategory } from "@/generated/prisma/client";
 import {
@@ -28,7 +29,7 @@ function Row({ row }: { row: IngredientReviewRow }) {
   if (mergedInto) {
     return (
       <tr className="border-t border-zinc-100">
-        <td colSpan={7} className="px-3 py-2 text-sm text-zinc-500">
+        <td colSpan={8} className="px-3 py-2 text-sm text-zinc-500">
           <span className="italic">&ldquo;{row.canonicalName}&rdquo;</span> merged into{" "}
           <span className="font-medium capitalize">{mergedInto}</span>.
         </td>
@@ -151,6 +152,15 @@ function Row({ row }: { row: IngredientReviewRow }) {
           className={`w-56 ${fieldClass}`}
         />
       </td>
+      <td className="px-3 py-2 text-sm">
+        {packagedUnit.trim() && packagedUnitQuantity.trim() && packagedUnitBase ? (
+          <Link href={`/ingredients/review/${row.id}/convert`} className="text-emerald-700 hover:underline">
+            Review recipes →
+          </Link>
+        ) : (
+          <span className="text-xs text-zinc-300">Set packaging first</span>
+        )}
+      </td>
     </tr>
   );
 }
@@ -162,7 +172,7 @@ export default function IngredientReviewTable({ rows }: { rows: IngredientReview
 
   return (
     <div className="mt-4 overflow-x-auto rounded-2xl border border-zinc-200">
-      <table className="w-full min-w-[1100px] border-collapse text-left">
+      <table className="w-full min-w-[1250px] border-collapse text-left">
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
             <th className="px-3 py-2">Name</th>
@@ -174,6 +184,12 @@ export default function IngredientReviewTable({ rows }: { rows: IngredientReview
             <th className="px-3 py-2">Qty</th>
             <th className="px-3 py-2">Base</th>
             <th className="px-3 py-2">Substitution note</th>
+            <th
+              className="px-3 py-2"
+              title="Compare each recipe's actual amount against the packaged size and convert the clean matches"
+            >
+              Convert
+            </th>
           </tr>
         </thead>
         <tbody>

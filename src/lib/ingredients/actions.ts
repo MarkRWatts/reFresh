@@ -74,3 +74,28 @@ export async function updateIngredientNote(id: string, shoppingListNote: string 
   });
   revalidatePath(REVIEW_PATH);
 }
+
+/**
+ * Rewrites ONE recipe's ingredient line to use a packaged-unit quantity
+ * instead of a raw weight/volume — e.g. "10g" of beef stock paste becomes
+ * "1x" beef stock pot, because that particular recipe's amount turned out
+ * to be (close to) a whole pot. Deliberately per-row, not per-ingredient:
+ * see getIngredientConversionReview's doc comment for why this can't be a
+ * blanket rule (a different recipe using the same ingredient might
+ * legitimately want a different, non-whole-pot amount). Only `quantity`
+ * and `unit` change — `rawText` (what HelloFresh's page actually said) is
+ * left alone as a provenance record, and isn't shown anywhere in the app
+ * itself, so there's nothing user-visible left inconsistent.
+ */
+export async function applyPackagedUnitConversion(
+  recipeIngredientId: string,
+  ingredientId: string,
+  quantity: number,
+  unit: string,
+): Promise<void> {
+  await prisma.recipeIngredient.update({
+    where: { id: recipeIngredientId },
+    data: { quantity, unit },
+  });
+  revalidatePath(`/ingredients/review/${ingredientId}/convert`);
+}

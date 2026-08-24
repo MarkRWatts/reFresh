@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { normalizeUnitLabel } from "@/lib/ingredients/unitSynonyms";
 
 export interface ShoppingListEntry {
   recipeId: string;
@@ -30,23 +31,6 @@ export interface IngredientGroup {
    * counted as zero.
    */
   quantitiesByUnit: QuantityByUnit[];
-}
-
-// Raw HelloFresh unit strings that mean the same physical unit but appear
-// inconsistently across recipes/imports (e.g. "grams" on one recipe, "g"
-// on another) — folded together so shopping-list totals actually combine
-// instead of splitting into near-duplicate buckets.
-const UNIT_SYNONYMS: Record<string, string> = {
-  gram: "g",
-  grams: "g",
-  milliliter: "ml",
-  milliliters: "ml",
-  "milliliter(s)": "ml",
-};
-
-function normalizeUnitLabel(unit: string | null): string | null {
-  if (unit == null) return null;
-  return UNIT_SYNONYMS[unit] ?? unit;
 }
 
 function summarizeQuantities(entries: ShoppingListEntry[]): QuantityByUnit[] {
