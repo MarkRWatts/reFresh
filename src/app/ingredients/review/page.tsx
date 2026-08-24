@@ -36,7 +36,7 @@ export default async function IngredientReviewPage({
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+    <main className="w-full flex-1 px-4 py-6 sm:px-6">
       <BackLink className="text-sm text-zinc-500 hover:text-zinc-700" />
 
       <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Ingredient review</h1>

@@ -68,7 +68,7 @@ function Row({ row }: { row: IngredientReviewRow }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={saveName}
-          className={`w-48 capitalize ${fieldClass}`}
+          className={`w-96 capitalize ${fieldClass}`}
         />
       </td>
       <td className="px-3 py-2 text-sm text-zinc-500">{row.usageCount}</td>
@@ -152,7 +152,7 @@ export default function IngredientReviewTable({ rows }: { rows: IngredientReview
 
   return (
     <div className="mt-4 overflow-x-auto rounded-2xl border border-zinc-200">
-      <table className="w-full min-w-[900px] border-collapse text-left">
+      <table className="w-full min-w-[1100px] border-collapse text-left">
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
             <th className="px-3 py-2">Name</th>
