@@ -113,16 +113,33 @@ function normalizeUnit(unit: string | null): string | null {
   return unit !== null && PLACEHOLDER_UNIT_WORDS.has(unit) ? null : unit;
 }
 
+// The full Unicode "Number Forms" set of vulgar fractions, not just the
+// ones seen in scraped data so far — unlike a word-based heuristic, a
+// fraction glyph is unambiguous (there's no "false positive" risk the way
+// there was with origin qualifiers), so there's no reason to be
+// conservative here. Originally missing the fifths/ninths/tenths, which
+// caused lines like "⅕ Bunch(es) Rosemary" (common for herbs) to fail to
+// parse entirely and dump the whole "⅕ bunch(es) rosemary" string into the
+// ingredient name instead of splitting out quantity=0.2/unit=bunch(es).
 const UNICODE_FRACTIONS: Record<string, number> = {
   "¼": 0.25,
   "½": 0.5,
   "¾": 0.75,
   "⅓": 1 / 3,
   "⅔": 2 / 3,
+  "⅕": 1 / 5,
+  "⅖": 2 / 5,
+  "⅗": 3 / 5,
+  "⅘": 4 / 5,
+  "⅙": 1 / 6,
+  "⅚": 5 / 6,
+  "⅐": 1 / 7,
   "⅛": 0.125,
   "⅜": 0.375,
   "⅝": 0.625,
   "⅞": 0.875,
+  "⅑": 1 / 9,
+  "⅒": 1 / 10,
 };
 const UNICODE_FRACTION_CHARS = Object.keys(UNICODE_FRACTIONS).join("");
 
