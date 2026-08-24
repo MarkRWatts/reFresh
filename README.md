@@ -34,6 +34,7 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - **Favourites**: heart-toggle on cards and the detail page, plus a filter.
 - **Custom & imported recipes**: clone any recipe to edit, or import one from a scanned/photographed card — a "My recipe" / "From a card scan" badge distinguishes these from the scraped catalog. The full editor (name, subtitle, cook time, ingredients, nutrition, steps, cover photo) is available for any of these, with protein-type classification re-derived automatically as you edit, plus a confirm-guarded delete. See [Importing recipes from a scan](#importing-recipes-from-a-scan) for the two ways to do the import itself.
 - **Hide auto-imported recipes**: reversible per-recipe hide (distinct from deleting, which is only for custom/imported recipes) with a "Hidden" filter to find and unhide them.
+- **Ingredient review** (`/ingredients/review`): admin tool for HelloFresh's inevitable naming/unit inconsistencies — rename/merge duplicate ingredients, tag categories, research real pack sizes so the shopping list can convert "1 pot" into a summable amount, and bulk-apply the resulting conversions across every affected recipe.
 
 ## Stack
 
@@ -141,6 +142,10 @@ The app runs on a TrueNAS-hosted Ubuntu VM, behind a Caddy reverse proxy shared 
 | `npm run scrape -- [flags]` | Crawl the HelloFresh sitemap into Postgres. Flags: `--sample=N` (stratified sample across the whole sitemap), `--limit=N` (stop after N *new* pages), `--concurrency=N` (default 5), `--delay-ms=N` (default 200, politeness delay between live fetches), `--force` (re-process every sitemap URL even if already up to date) |
 | `npm run reprocess` | `scrape --force`, but every page is already cached — reapplies current parsing/classification logic to the whole catalog with **zero network requests**. This is the standard way to backfill a code change (see [How it works](#how-it-works)) |
 | `npm run detect-variants` | Re-cluster near-duplicate recipes across the whole browsable catalog |
+| `npm run detect-ingredient-merges -- --dry-run` | Report-only scan for likely duplicate/misspelled ingredient names (exact-match, close-spelling, and substring-variant tiers) — surfaces candidates for the ingredient review page's rename/merge UI, never merges anything itself |
+| `npm run merge-ingredients -- --dry-run` | Re-canonicalizes every `Ingredient` and merges any that now collide — the catch-up for existing data whenever `canonicalizeIngredientName`'s rules change |
+| `npm run reparse-ingredient-lines -- --dry-run` | Re-runs the ingredient-line parser against every stored `rawText` and fixes any row whose quantity/unit now comes out different — the catch-up for parser/unit-normalization changes |
+| `npm run delete-unused-ingredients` | Removes `Ingredient` rows with zero `RecipeIngredient` usages (e.g. left behind after a merge or a reparse) |
 | `npm run import-pdf -- <path.pdf> [--dump-crops <dir>]` | Debug entry point for the OCR card parser — prints what was read from one PDF (optionally dumping its cover/step-photo crops) without touching the database |
 | `npm run commit-vision-import -- <staging-dir> [servingIndex]` | Commits one vision-transcribed card (a `data.json` + its referenced images in `<staging-dir>`) straight into the database — see [Importing recipes from a scan](#importing-recipes-from-a-scan) |
 | `npm run db:snapshot` | `pg_dump` the database to `db-backups/refresh.dump` |
@@ -208,7 +213,15 @@ Recipe(
   lastSuggestedAt,                       // stamped on every /suggest appearance, so results don't repeat
   lastScrapedAt, createdAt, updatedAt,
 )
-Ingredient(id, canonicalName, category)
+Ingredient(
+  id, canonicalName, category,
+  packagedUnit, packagedUnitQuantity, packagedUnitBase, // real pack size, e.g. "1 pot(s) = 150 ml" —
+                                                          //   research-backed, not scraped; see "How it works"
+  packagedUnitBaseGrams,                                 // set only when packagedUnitBase isn't g/ml,
+                                                          //   e.g. 15 for honey's "tbsp"
+  shoppingListNote,                                      // free-text substitution guidance for a
+                                                          //   HelloFresh-proprietary blend/product
+)
 IngredientAlias(id, rawText, ingredientId -> Ingredient)   // raw scraped/typed text -> canonical ingredient
 RecipeIngredient(id, recipeId -> Recipe, ingredientId -> Ingredient, quantity, unit, rawText)
 MealPlan(id, label, createdAt)                              // single implicit plan, no auth/multi-user
@@ -230,6 +243,8 @@ A few things that aren't obvious from the schema/routes alone:
 
 **Auto-suggest** (`src/lib/mealplan/autoSuggest.ts`) greedily grows a recipe set from a seed, at each step adding whichever candidate shares the most ingredients with the set built so far, repeated from ~40 seeds. This greedy criterion is provably exact (not approximate) for the stated "sum of (recipes sharing this ingredient − 1)" objective. Deliberately does **not** reuse the near-duplicate detector's IDF weighting — there, common ingredients are noise to filter out; here, a shared common ingredient (onion, garlic) is exactly the win the feature exists to surface.
 
+**Ingredient unit normalization happens at import time, not just at read time.** `src/lib/ingredients/unitSynonyms.ts` folds every spelling variant the parser recognizes ("grams"/"pot(s)"/"tablespoons" → "g"/"pot"/"tbsp") straight into `ingredientParser.ts`'s `normalizeUnit()`, so a freshly scraped row is stored already-canonical rather than needing a later cleanup pass. Layered on top, the ingredient review page (`/ingredients/review`) lets a real pack size be researched once per ingredient (`packagedUnit`/`packagedUnitQuantity`/`packagedUnitBase` — HelloFresh's own data never states these) and, when the natural unit isn't grams or millilitres, a `packagedUnitBaseGrams` ratio (e.g. "15g = 1 tbsp" for honey) derived by cross-referencing recipes that recorded the same ingredient both ways. Both are then used to bulk-convert every recipe that recorded that ingredient inconsistently — always a human-triggered action from the review page, never applied silently.
+
 **Missing-image visibility.** hellofresh.co.uk never shows a recipe tile without a photo, so `computeIsBrowsable` (`src/lib/scraper/upsertRecipe.ts`) treats a missing/unusable image as a visibility signal, not just a display fallback — alongside the more obvious "zero ingredients" and "one step" stub-page checks.
 
 **Two independent ways to turn a scan into a `Recipe` row, sharing one persistence layer.** `src/lib/pdfImport/commitImport.ts` (the in-app OCR review screen) and `commitVisionImport.ts` (the batch/vision path) don't call each other — the first takes a human-reviewed `FormData` submission and needs a real Next.js request context for its `redirect()`/`revalidatePath()` calls, while the second is driven by a plain script with no such context. Rather than force one into the other's shape, they instead both call the same underlying lib functions directly (`resolveIngredientId`, `classifyProteinType`, `saveDraftImages`/`promoteDraftImages`, slug generation) — so neither path can drift from how the other actually persists a recipe.
@@ -249,7 +264,7 @@ npx prisma migrate resolve --applied <timestamp>_<name>
 
 - Full history and reasoning for all of these: [`project-plan.md § Open items to revisit later`](../reFresh-docs/project-plan.md).
 - Protein-type classification and the variant-detection similarity threshold are both heuristics, tuned by spot-checking real data rather than exhaustively validated; expect occasional misclassifications.
-- No true cross-unit quantity conversion in the shopping list (e.g. tbsp → ml) — an ingredient specified in two different units across recipes shows as two separate totals.
+- Cross-unit shopping-list conversion only works for ingredients that have been through the review page (500+ so far) — an ingredient without a researched `packagedUnit` still shows as separate totals per unit it's recorded in.
 - OCR-based card scanning (the in-app `/recipes/import` flow) is imperfect by design — always check the review screen before saving. The vision-based batch alternative is far more accurate but isn't wired into the web UI at all; it's a separate Claude Code workflow (see [Importing recipes from a scan](#importing-recipes-from-a-scan)) with no review step of its own, so a bad transcription there goes straight into the database.
 - Only a handful of known HelloFresh card print layouts are recognized by the OCR path; an unsupported layout has to be entered manually (or via the vision-based path, which doesn't have this limitation).
 
