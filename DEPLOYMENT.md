@@ -142,7 +142,7 @@ Sign in as both household members again — same recipe catalog and count as bef
 
 ## Going public (Cloudflare Tunnel + Access + Pi-hole split DNS)
 
-Runbook for opening `https://refresh.markrwatts.com` to invited friends/family on the internet — written ahead of the move, not yet applied. No port-forwarding, and the home IP never appears in DNS.
+Runbook for opening `https://refresh.markrwatts.com` to invited friends/family on the internet. No port-forwarding, and the home IP never appears in DNS. **Applied 2026-08-25** — see [As applied](#as-applied-2026-08-25) below for the deltas between this plan and what the dashboard actually looks like now.
 
 The shape: externally, a **Cloudflare Tunnel** carries traffic from Cloudflare's edge to the VM over an outbound-only connection, with **Cloudflare Access** (an email allowlist, free tier covers 50 users) gating it before a request ever reaches the VM. Internally, the **Pi-hole** answers `refresh.markrwatts.com` with the VM's LAN IP, so LAN clients keep hitting the shared Caddy directly — same URL, same real Let's Encrypt certificate on both paths (Caddy's cert comes via DNS-01/acme-dns, which doesn't care where the public record points, so the LAN path stays warning-free). App-level auth (Better Auth) is unchanged and applies on both paths; Access is an extra outer gate on the external path only.
 
@@ -205,6 +205,18 @@ One deliberate difference from jinglejotter.com's version: **empty/unset = gate 
 - Keep it in lockstep with the Access policy — same emails in both places. Access rejects strangers at Cloudflare's edge; `ALLOWED_EMAILS` rejects them at session creation.
 - A rejected sign-in surfaces as `?error=failed_to_create_session` on the sign-in page (Better Auth's generic failure), not a bespoke "not invited" message — acceptable for a vetted-invitees app.
 - Unlike the Access policy, changing this list means an env edit + container restart on the VM, not a dashboard edit. Access remains the quick lever; this is the backstop.
+
+### As applied (2026-08-25)
+
+What actually happened when this ran, where it differed from the plan above:
+
+- **Tunnel**: `home-edge`, created via Zero Trust → Networks → Tunnels & Mesh. Public hostnames now live on the tunnel's **"Published application routes"** tab (the dashboard renamed them); the route is `refresh.markrwatts.com` → `http://refresh:3000`, and the tunnel's catch-all rule (any other hostname pointed at it) returns `http_status:404`.
+- **Token handling**: the connector token never passed through the assistant/chat — Mark copied it from the dashboard and piped it from the clipboard straight into `~/edge/.env` over SSH (`pbpaste | grep -oE 'eyJ...' | ssh ... 'cat >> ~/edge/.env'`).
+- **Access app**: application `refresh` (domain `refresh.markrwatts.com`), policy named `refresh.markrwatts.com` allowing `markrwatts@gmail.com` + `partner@example.com`, session duration 1 month. "Accept all available identity providers" is on, which on this account resolves to **one-time PIN only** — no other IdP is configured.
+- **DNS**: the old grey-cloud A record had a **1-day TTL**, so LAN clients kept resolving to the VM (straight to Caddy) until their caches expired — an accidental grace period, no outage during the flip. Once caches expire, everything hairpins through Cloudflare, Access included.
+- **`ALLOWED_EMAILS` needed a compose fix**: the base `docker-compose.yml` didn't forward the var into the `app` container (`--env-file` only does compose-file substitution). Fixed by adding it to the `environment:` map.
+- **Pi-hole split DNS deliberately deferred** — full hairpin accepted for now; section 4 below is the still-unapplied plan for when LAN-direct routing is wanted.
+- **Verified**: `curl --resolve refresh.markrwatts.com:443:<cf-edge-ip>` returns the 302 to `example-team.cloudflareaccess.com` — Access intercepts before the origin. App-level gate verified live in the container (2 allowlist entries loaded).
 
 ### 4. Pi-hole split DNS (LAN path)
 
