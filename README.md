@@ -1,19 +1,20 @@
 # re:Fresh
 
-A personal web app for browsing HelloFresh (UK) recipes as cards and planning a week's meals around **shared ingredients**, to cut food waste and duplicate shopping. Single-user, no auth, local-first.
+A web app for browsing HelloFresh (UK) recipes as cards and planning a week's meals around **shared ingredients**, to cut food waste and duplicate shopping. Multi-household: sign in with Google or a magic link, and each household keeps its own favourites, hidden recipes, and weekly plan against one shared recipe catalog.
 
 Full phase-by-phase history, design rationale, and bugs found along the way: [`../reFresh-docs/project-plan.md`](../reFresh-docs/project-plan.md). This README is the practical "how to run and work on this project" reference.
 
 | ![Card browser with the filter bar, protein-type colour coding, and favourite/plan toggles](docs/screenshot-browse.png) | ![The "This week" plan drawer, showing shared ingredients across recipes and a shopping list preview](docs/screenshot-plan.png) | ![Full shopping list page, summed across the week's recipes](docs/screenshot-shopping-list.png) |
 |---|---|---|
 
-> **About the data.** This is a personal, non-commercial project for my own meal planning. The scraper only fetches pages `hellofresh.co.uk/robots.txt` explicitly permits crawling, reading the same public sitemap and per-page structured data (`schema.org/Recipe` JSON-LD) any search engine would. No scraped content, database dump, or cache is included in this repository — `.cache/` and `db-backups/` are gitignored — and nothing here is redistributed publicly; the app itself only ever runs locally. If you're from HelloFresh and have a concern about this, please open an issue.
+> **About the data.** This is a personal, non-commercial project for my own household's meal planning. The scraper only fetches pages `hellofresh.co.uk/robots.txt` explicitly permits crawling, reading the same public sitemap and per-page structured data (`schema.org/Recipe` JSON-LD) any search engine would. No scraped content, database dump, or cache is included in this repository — `.cache/` and `db-backups/` are gitignored — and nothing here is redistributed publicly; the deployed instance is LAN-only, behind sign-in, for real households I know. If you're from HelloFresh and have a concern about this, please open an issue.
 
 ## Contents
 
 - [Features](#features)
 - [Stack](#stack)
 - [Getting started](#getting-started)
+- [Authentication & households](#authentication--households)
 - [Populating the database](#populating-the-database)
 - [Importing recipes from a scan](#importing-recipes-from-a-scan)
 - [Deploying with Docker](#deploying-with-docker)
@@ -31,15 +32,17 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - **Weekly planner** (persistent drawer): add/remove recipes, adjust each recipe's serving count independently, and see which canonical ingredients are shared across 2+ recipes, with a consolidated shopping list summed per matching unit.
 - **Printing**: a dedicated print button on every recipe page (strips the app chrome down to just the recipe itself), and a separate printable, checklist-style shopping-list page linked from the planner — quantities reflect whatever serving counts you've set.
 - **Auto-suggest**: given the currently active browse filters, greedily picks combinations of recipes that maximize shared ingredients (a real optimization, not just "recipes with similar names") — never repeats a recipe across the returned options.
-- **Favourites**: heart-toggle on cards and the detail page, plus a filter.
-- **Custom & imported recipes**: clone any recipe to edit, or import one from a scanned/photographed card — a "My recipe" / "From a card scan" badge distinguishes these from the scraped catalog. The full editor (name, subtitle, cook time, ingredients, nutrition, steps, cover photo) is available for any of these, with protein-type classification re-derived automatically as you edit, plus a confirm-guarded delete. See [Importing recipes from a scan](#importing-recipes-from-a-scan) for the two ways to do the import itself.
-- **Hide auto-imported recipes**: reversible per-recipe hide (distinct from deleting, which is only for custom/imported recipes) with a "Hidden" filter to find and unhide them.
-- **Ingredient review** (`/ingredients/review`): admin tool for HelloFresh's inevitable naming/unit inconsistencies — rename/merge duplicate ingredients, tag categories, research real pack sizes so the shopping list can convert "1 pot" into a summable amount, and bulk-apply the resulting conversions across every affected recipe.
+- **Favourites**: heart-toggle on cards and the detail page, plus a filter — scoped per household (see below), not global.
+- **Custom & imported recipes**: clone any recipe to edit, or import one from a scanned/photographed card — a "My recipe" / "From a card scan" badge distinguishes these from the scraped catalog. The full editor (name, subtitle, cook time, ingredients, nutrition, steps, cover photo) is available for any of these, with protein-type classification re-derived automatically as you edit, plus a confirm-guarded delete. See [Importing recipes from a scan](#importing-recipes-from-a-scan) for the two ways to do the import itself. Shared across every household, same as the rest of the catalog.
+- **Hide auto-imported recipes**: reversible per-recipe hide (distinct from deleting, which is only for custom/imported recipes) with a "Hidden" filter to find and unhide them — per household, same as favourites.
+- **Ingredient review** (`/ingredients/review`): admin tool for HelloFresh's inevitable naming/unit inconsistencies — rename/merge duplicate ingredients, tag categories, research real pack sizes so the shopping list can convert "1 pot" into a summable amount, and bulk-apply the resulting conversions across every affected recipe. Global (any signed-in user), not household-scoped — it's curating the shared catalog, not personal state. Not linked from the main nav; reach it directly at `/ingredients/review`.
+- **Multi-household accounts**: Google or magic-link sign-in (Better Auth). Every household browses, plans, and clones from the exact same recipe catalog, but keeps its own favourites, hidden list, and this week's plan completely separate from every other household. From `/account`: rename the household, invite others by link, promote/demote/remove members, and delete your own account (deleting a household's sole owner's account takes the whole household with it — confirmed by typing its name). See [Authentication & households](#authentication--households).
 
 ## Stack
 
-- **Next.js 16** (App Router, TypeScript) + **Tailwind v4** — almost entirely Server Components and Server Actions; the few client islands (toggle buttons, the plan drawer, filter bar, print button, servings pickers) are called out explicitly in the code.
+- **Next.js 16** (App Router, TypeScript) + **Tailwind v4** — almost entirely Server Components and Server Actions; the few client islands (toggle buttons, the plan drawer, filter bar, print button, servings pickers) are called out explicitly in the code. Note: Next 16 renamed Middleware to **Proxy** (`src/proxy.ts`, not `middleware.ts`) — the naming throughout this codebase and README follows that.
 - **Prisma 7** + **PostgreSQL**, via `@prisma/adapter-pg` (Prisma 7 requires an explicit driver adapter).
+- **Better Auth** (`src/auth.ts`) — Google OAuth + magic link (via Resend), plus its `organization` plugin renamed to Household/Member/Invitation for multi-household support. See [Authentication & households](#authentication--households).
 - **A standalone scraper** (`scripts/scrape.ts`), decoupled from the request path: it populates Postgres from HelloFresh's public sitemap + per-page `schema.org/Recipe` JSON-LD (plus an internal app-data blob for richer per-step photos). The app itself never talks to HelloFresh live.
 - Runs locally via `npm run dev`, or containerized via the included `Dockerfile` + `docker-compose.yml` — see [Deploying with Docker](#deploying-with-docker).
 
@@ -51,14 +54,31 @@ Prerequisites: Node.js, a local PostgreSQL server.
 brew services start postgresql@16   # or use Docker instead — see below
 createdb refresh_dev
 npm install
-cp .env.example .env                # adjust DATABASE_URL if your setup differs
+cp .env.example .env                # adjust DATABASE_URL, and see "Authentication & households" for the rest
 npx prisma migrate deploy           # applies every migration in prisma/migrations, in order
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). At this point the database schema exists but is empty — see [Populating the database](#populating-the-database) below.
+Open [http://localhost:3000](http://localhost:3000) — every route redirects to `/signin` until you're signed in and belong to a household; see [Authentication & households](#authentication--households) for what `.env` needs before that works. At this point the database schema exists but is empty — see [Populating the database](#populating-the-database) below.
 
 `prisma migrate deploy` (not `migrate dev`) is what you want for a fresh database: it just replays the existing migration files non-interactively. `migrate dev` is for *generating new* migrations against a live dev database, and this project doesn't actually use it for that — see [How it works § schema migrations](#schema-migrations) for why.
+
+## Authentication & households
+
+Every route requires a signed-in session with household membership — [`src/proxy.ts`](src/proxy.ts) redirects everything except `/signin` and `/invite/[token]` to sign-in at the edge (a cheap cookie-presence check only; the real check is `auth.api.getSession()` against the database, done in each page/action). Sign-in itself is fully open — anyone can create an account and start their own household against the shared catalog; there's no email allowlist. A signed-in user with no household lands on `/onboarding` to create one or redeem an invite link.
+
+`.env` needs, beyond `DATABASE_URL` (see `.env.example` for the full set with comments):
+
+| Var | What it's for |
+|---|---|
+| `AUTH_SECRET` | Better Auth's session/cookie signing secret — `openssl rand -base64 32` |
+| `AUTH_URL` / `AUTH_TRUSTED_ORIGINS` | Better Auth's own base URL (it doesn't infer this from the request) and CSRF origin allowlist — `http://localhost:3000` for local dev |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth client (Google Cloud Console → APIs & Services → Credentials → Web application), redirect URI `<AUTH_URL>/api/auth/callback/google` |
+| `RESEND_API_KEY` | Sends magic-link emails via Resend's HTTP API (`src/lib/email.ts`) — the sending domain needs SPF/DKIM/DMARC verified in Resend |
+
+Google sign-in works without `RESEND_API_KEY` set; magic-link sign-in doesn't need real Google credentials. Either alone is enough to develop against locally.
+
+**Household model**: `Household`/`Member`/`Invitation` are Better Auth's `organization` plugin, renamed to this app's own domain language (see `src/auth.ts`). One household per user, enforced both at creation (`organizationLimit`) and invite-redemption time. Invites are redeemed by token (the invitation row's own id), not matched against the invitee's email — the email on an invitation is just a hint shown in the invite UI. `src/lib/require-member.ts`'s `requireMember()`/`requireMemberOrRedirect()` is the one place every mutating action and protected page resolves "which household is this for" — see [How it works § household-scoped data](#household-scoped-data) for why that matters more than usual here.
 
 ## Populating the database
 
@@ -104,7 +124,8 @@ For a batch of cards, cookbook photos, or anything an unsupported/imperfect OCR 
 For running this somewhere other than a dev machine — a home server or NAS — `Dockerfile` + `docker-compose.yml` build the app and run it alongside its own Postgres container. The image keeps the full `node_modules` tree (including `tsx`) rather than Next's pruned "standalone" output, specifically so the scraper scripts run inside the container the same way they do locally.
 
 ```bash
-cp .env.docker.example .env.docker     # set a real POSTGRES_PASSWORD
+cp .env.docker.example .env.docker     # set a real POSTGRES_PASSWORD, plus the AUTH_*/RESEND_API_KEY vars
+                                        # — see "Authentication & households" for what each one is
 docker compose --env-file .env.docker up -d --build
 ```
 
@@ -119,6 +140,8 @@ docker compose --env-file .env.docker exec app npm run detect-variants
 ```
 
 — or copy a snapshot onto the host into the `db-backups` volume (see below) and run `docker compose --env-file .env.docker exec app npm run db:restore`.
+
+Sign in once (Google or magic link) to create your first `User` row, then either use `/onboarding` in the browser to create a household normally, or — if migrating existing favourite/hidden/plan data from a pre-auth deployment into a real multi-person household — run `scripts/backfill-household.ts` instead (see [DEPLOYMENT.md](DEPLOYMENT.md#multi-household-auth-phase-16) for the exact production sequence, since it has to run in a specific window between two schema migrations).
 
 The app listens on port 3000 (`http://<host>:3000`); edit the `ports:` mapping in `docker-compose.yml` for a different host port. Three named volumes persist state across container rebuilds: `pgdata` (the database itself), `scraper-cache` (`.cache/`, so re-scrapes/reprocesses don't redownload pages already fetched), and `db-backups` (`npm run db:snapshot` output). On TrueNAS specifically, it's worth pointing these at a ZFS dataset via bind mounts instead of Docker-managed named volumes, so they pick up TrueNAS's own snapshot/replication — e.g. swap `pgdata:` for `/mnt/<pool>/refresh/pgdata:/var/lib/postgresql/data` under the `db` service.
 
@@ -164,6 +187,7 @@ scripts/
   import-pdf.ts              # OCR card-parser debug entry point (see below)
   commit-vision-import.ts    # commits a vision-transcribed staging dir into the DB (see below)
   vision-import-prompt.md    # self-contained runbook for a Claude Code batch-import session
+  backfill-household.ts      # one-off: creates a Household and migrates pre-auth global data into it
   db-snapshot.ts / db-restore.ts
   generate-favicon.ts
 public/
@@ -172,13 +196,21 @@ storage/                    # gitignored — RECIPE_IMAGES_DIR default (Docker v
   recipe-images/             # cover/step photos for custom/imported recipes, keyed by recipe id
   pdf-import/                 # working area for the vision batch-import workflow (inbox/staging/done/failed)
 src/
+  auth.ts                   # Better Auth config — Google, magic link, organization (Household) plugin
+  proxy.ts                  # edge-level auth gate (Next 16's renamed Middleware) — optimistic cookie check only
   app/                      # Next.js App Router routes
     page.tsx                 # card browser ("/")
     recipes/[slug]/           # detail page, + edit/ for the full custom/imported-recipe editor
     recipes/import/            # OCR card upload + per-draft review screen
     api/recipe-images/         # serves storage/recipe-images/* (not under public/ — see comment in imageStorage.ts)
+    api/auth/[...all]/         # mounts Better Auth's own routes (toNextJsHandler)
     suggest/                  # auto-suggest page
     plan/print/                # printable shopping list
+    signin/ onboarding/         # sign-in (Google + magic link), first-run create/join-household
+    invite/[token]/             # public invite landing page (reachable signed out)
+    account/                    # household name/members/invites, sign out, delete account
+    actions/household.ts        # create/rename household, invite/member management, accept invite
+    actions/account.ts          # self-service account deletion
   components/                # mostly small client islands next to Server Component pages
   lib/
     scraper/                 # sitemap fetch, JSON-LD/app-data parsing, ingredient-line parsing,
@@ -187,8 +219,10 @@ src/
                               #   variant detection, custom-recipe clone/edit/delete/hide actions
     pdfImport/                # scanned-card parsing (OCR + vision-import), review-draft persistence,
                               #   image storage — see "Importing recipes from a scan"
-    mealplan/                 # the (single, implicit) weekly plan: queries, actions, auto-suggest
-    favourites/                # favourite toggle action
+    mealplan/                 # the (household-scoped) weekly plan: queries, actions, auto-suggest
+    favourites/                # favourite toggle action (household-scoped)
+    require-member.ts          # requireMember()/requireMemberOrRedirect() — the household-scoping choke point
+    email.ts                   # branded transactional email (magic-link sign-in) via Resend's HTTP API
     brand/                     # 16/32/48px icon sources for favicon.ico
   generated/prisma/           # Prisma client output (gitignored, regenerated via `prisma generate`)
 ```
@@ -196,6 +230,8 @@ src/
 ## Data model
 
 ```prisma
+// --- Shared catalog — same rows for every household ---
+
 Recipe(
   id, hfId, slug, name, subtitle, description, imageUrl, sourceUrl,
   cookMinutes, servings, calories,
@@ -206,11 +242,8 @@ Recipe(
   isPublished, isActive,                 // HelloFresh's own metadata, informational only
   isBrowsable,                           // computed at scrape time — see computeIsBrowsable
   variantOfId -> Recipe,                 // near-duplicate clustering, recomputed wholesale by detect-variants
-  isFavourite,
-  isHidden,                              // reversible per-recipe hide (auto-imported recipes only)
   isUserCreated, clonedFromId -> Recipe, // custom recipes (clone & edit)
   isPdfImport,                           // more specific than isUserCreated — imported from a scanned card
-  lastSuggestedAt,                       // stamped on every /suggest appearance, so results don't repeat
   lastScrapedAt, createdAt, updatedAt,
 )
 Ingredient(
@@ -224,9 +257,30 @@ Ingredient(
 )
 IngredientAlias(id, rawText, ingredientId -> Ingredient)   // raw scraped/typed text -> canonical ingredient
 RecipeIngredient(id, recipeId -> Recipe, ingredientId -> Ingredient, quantity, unit, rawText)
-MealPlan(id, label, createdAt)                              // single implicit plan, no auth/multi-user
-MealPlanRecipe(id, mealPlanId -> MealPlan, recipeId -> Recipe, servings)  // servings: null = use recipe's own base
 PdfImportDraft(id, originalFilename, templateId, data (Json), createdAt)  // OCR-import staging row, see below
+
+// --- Auth (Better Auth core) ---
+
+User(id, name, email, emailVerified, image, createdAt, updatedAt)
+Account(id, userId -> User, accountId, providerId, issuer, accessToken, refreshToken, ...)  // one per linked sign-in method
+Session(id, userId -> User, token, expiresAt, activeHouseholdId, ...)
+Verification(id, identifier, value, expiresAt, ...)          // magic-link / OAuth PKCE transient state
+
+// --- Households (Better Auth's organization plugin, renamed) ---
+
+Household(id, name, slug, createdAt)
+Member(id, householdId -> Household, userId -> User, role)      // role: "owner" | "member"
+Invitation(id, householdId -> Household, email, role, status, expiresAt, inviterId -> User)
+
+// --- Per-household state on the shared catalog ---
+
+HouseholdRecipeState(
+  id, householdId -> Household, recipeId -> Recipe,
+  isFavourite, isHidden,                 // per-household — see Recipe's old isFavourite/isHidden, pre-Phase-16
+  lastSuggestedAt,                       // stamped on every /suggest appearance for this household
+)
+MealPlan(id, label, createdAt, householdId -> Household)     // one implicit "current" plan per household
+MealPlanRecipe(id, mealPlanId -> MealPlan, recipeId -> Recipe, servings)  // servings: null = use recipe's own base
 ```
 
 `ProteinType` enum: `CHICKEN | TURKEY | BEEF | LAMB | PORK | DUCK | VENISON | MEAT_OTHER | FISH | VEGETARIAN | VEGAN | UNKNOWN`.
@@ -234,6 +288,10 @@ PdfImportDraft(id, originalFilename, templateId, data (Json), createdAt)  // OCR
 ## How it works
 
 A few things that aren't obvious from the schema/routes alone:
+
+<a id="household-scoped-data"></a>**Household-scoped data lives in a join table, not a column on the shared rows.** `Recipe`/`Ingredient`/`RecipeIngredient` have no `householdId` — every household browses the identical catalog. Favourites, hidden recipes, and suggestion-cooldown tracking are per-household *state about* a shared `Recipe`, so they live in `HouseholdRecipeState` (unique on `householdId, recipeId`) instead — the opposite of the more common pattern where a household-owned model just grows an owner column. `src/lib/recipes/queries.ts` selects each recipe's `HouseholdRecipeState` row for the current household and flattens it back onto a plain `isFavourite`/`isHidden` boolean before returning, so every component downstream (`RecipeCard`, the toggle buttons) is unaware the underlying storage changed shape at all. `MealPlan` is the more ordinary case — it gained a real `householdId` column, since a meal plan genuinely is owned by one household rather than being shared state on a shared row.
+
+**A same-layout client navigation doesn't re-run the root layout's own code.** `src/app/layout.tsx` computes the header (This week badge, account vs. sign-in state) once per request; Next's App Router reuses that render across a client-side transition between two routes that share the same layout, rather than re-executing it, so redirecting straight to `/` right after a state change only the layout itself reflects (creating a household, signing out) left a stale header until a hard reload. Every action that changes auth/household state and then `redirect()`s calls `revalidatePath("/", "layout")` first to force a fresh render — same fix `src/lib/mealplan/actions.ts` already needed for the "This week" badge count.
 
 **Ingredient canonicalization.** HelloFresh's raw ingredient text varies across recipes and eras ("Garlic Clove" vs "Garlic Cloves" vs "1 unit(s) Garlic Clove"). `src/lib/recipes/ingredientResolution.ts` resolves any raw ingredient string (scraped, or typed into the custom-recipe editor) to a canonical `Ingredient` row, creating an `IngredientAlias` the first time a given raw string is seen. This is what makes "shared ingredients" and shopping-list summing actually work — it's computed on canonical ingredients, never raw text.
 
@@ -267,6 +325,7 @@ npx prisma migrate resolve --applied <timestamp>_<name>
 - Cross-unit shopping-list conversion only works for ingredients that have been through the review page (500+ so far) — an ingredient without a researched `packagedUnit` still shows as separate totals per unit it's recorded in.
 - OCR-based card scanning (the in-app `/recipes/import` flow) is imperfect by design — always check the review screen before saving. The vision-based batch alternative is far more accurate but isn't wired into the web UI at all; it's a separate Claude Code workflow (see [Importing recipes from a scan](#importing-recipes-from-a-scan)) with no review step of its own, so a bad transcription there goes straight into the database.
 - Only a handful of known HelloFresh card print layouts are recognized by the OCR path; an unsupported layout has to be entered manually (or via the vision-based path, which doesn't have this limitation).
+- A new Google OAuth client defaults to "Testing" publishing status, which caps sign-in to an explicit test-user list on the consent screen regardless of this app's own open sign-in — publish the client (or add every real sign-in email as a test user) in Google Cloud Console once more than a handful of households need Google sign-in.
 
 ## License
 
