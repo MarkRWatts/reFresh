@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireMember } from "@/lib/require-member";
 import { getOrCreateCurrentMealPlan } from "./queries";
 
 export async function addRecipeToPlan(recipeId: string): Promise<void> {
-  const plan = await getOrCreateCurrentMealPlan();
+  const { householdId } = await requireMember();
+  const plan = await getOrCreateCurrentMealPlan(householdId);
   await prisma.mealPlanRecipe.upsert({
     where: { mealPlanId_recipeId: { mealPlanId: plan.id, recipeId } },
     create: { mealPlanId: plan.id, recipeId },
@@ -19,7 +21,8 @@ export async function addRecipeToPlan(recipeId: string): Promise<void> {
 }
 
 export async function removeRecipeFromPlan(recipeId: string): Promise<void> {
-  const plan = await getOrCreateCurrentMealPlan();
+  const { householdId } = await requireMember();
+  const plan = await getOrCreateCurrentMealPlan(householdId);
   await prisma.mealPlanRecipe.deleteMany({
     where: { mealPlanId: plan.id, recipeId },
   });
@@ -27,9 +30,10 @@ export async function removeRecipeFromPlan(recipeId: string): Promise<void> {
 }
 
 export async function setMealPlanRecipeServings(recipeId: string, formData: FormData): Promise<void> {
+  const { householdId } = await requireMember();
   const raw = Number(formData.get("servings"));
   const servings = Number.isFinite(raw) && raw > 0 ? raw : null;
-  const plan = await getOrCreateCurrentMealPlan();
+  const plan = await getOrCreateCurrentMealPlan(householdId);
   await prisma.mealPlanRecipe.update({
     where: { mealPlanId_recipeId: { mealPlanId: plan.id, recipeId } },
     data: { servings },
@@ -39,7 +43,8 @@ export async function setMealPlanRecipeServings(recipeId: string, formData: Form
 
 /** Adds every recipe in a suggested combination to the plan in one go, then sends the user home to see it populated in the drawer. */
 export async function addRecipesToPlan(recipeIds: string[]): Promise<void> {
-  const plan = await getOrCreateCurrentMealPlan();
+  const { householdId } = await requireMember();
+  const plan = await getOrCreateCurrentMealPlan(householdId);
   for (const recipeId of recipeIds) {
     await prisma.mealPlanRecipe.upsert({
       where: { mealPlanId_recipeId: { mealPlanId: plan.id, recipeId } },

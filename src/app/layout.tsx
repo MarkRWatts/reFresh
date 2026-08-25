@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
+import { headers } from "next/headers";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/db";
 import Logo from "@/components/Logo";
 import PlanDrawerRoot from "@/components/PlanDrawerRoot";
+import SignOutButton from "@/components/SignOutButton";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,11 +29,21 @@ export const metadata: Metadata = {
 // this layout can be statically prerendered (there's no DB at build time).
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Soft check, not requireMemberOrRedirect() — this layout wraps every
+  // route including the public /signin and /invite/[token] pages, so it
+  // can't unconditionally bounce a signed-out visitor. Each protected page
+  // does its own requireMemberOrRedirect(); this just decides what the
+  // header itself shows.
+  const session = await auth.api.getSession({ headers: await headers() });
+  const member = session?.user?.id
+    ? await prisma.member.findFirst({ where: { userId: session.user.id } })
+    : null;
+
   return (
     <html
       lang="en"
@@ -49,7 +63,27 @@ export default function RootLayout({
                 priority
               />
             </Link>
-            <PlanDrawerRoot />
+            {member && <PlanDrawerRoot householdId={member.householdId} />}
+            <div className="ml-auto flex items-center gap-3">
+              {session?.user ? (
+                <>
+                  <Link
+                    href="/account"
+                    className="text-sm font-medium text-zinc-600 hover:text-zinc-900"
+                  >
+                    Account
+                  </Link>
+                  <SignOutButton compact />
+                </>
+              ) : (
+                <Link
+                  href="/signin"
+                  className="rounded-full border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+                >
+                  Sign in
+                </Link>
+              )}
+            </div>
           </div>
         </header>
         <div className="flex flex-1 flex-col">{children}</div>

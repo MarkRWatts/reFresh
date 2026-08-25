@@ -13,7 +13,7 @@ export interface RecipeListParams {
   search?: string;
   favouritesOnly?: boolean;
   importedOnly?: boolean;
-  /** Shows only user-hidden recipes instead of excluding them — see toggleHidden in hiddenActions.ts. The one place a hidden recipe can be found again to unhide it. */
+  /** Shows only this household's hidden recipes instead of excluding them — see toggleHidden in hiddenActions.ts. The one place a hidden recipe can be found again to unhide it. */
   hiddenOnly?: boolean;
   showAll?: boolean;
   sort?: SortOption;
@@ -23,27 +23,48 @@ export interface RecipeListParams {
 
 const DEFAULT_PAGE_SIZE = 24;
 
-const RECIPE_SUMMARY_SELECT = {
-  id: true,
-  slug: true,
-  name: true,
-  subtitle: true,
-  imageUrl: true,
-  cookMinutes: true,
-  calories: true,
-  proteinType: true,
-  cuisine: true,
-  ratingValue: true,
-  ratingCount: true,
-  isFavourite: true,
-  isUserCreated: true,
-  isPdfImport: true,
-  isHidden: true,
-} satisfies Prisma.RecipeSelect;
+// Favourite/hidden state moved off Recipe into a per-household join table
+// (HouseholdRecipeState — see prisma/schema.prisma and project-plan.md
+// Phase 16), since the recipe catalog itself is shared across households.
+// This select pulls just this household's row (at most one, per its unique
+// constraint) so the result can be flattened back to flat
+// isFavourite/isHidden booleans — see flattenSummary below — keeping every
+// downstream component (RecipeCard, the toggle buttons, ...) unchanged.
+function recipeSummarySelect(householdId: string) {
+  return {
+    id: true,
+    slug: true,
+    name: true,
+    subtitle: true,
+    imageUrl: true,
+    cookMinutes: true,
+    calories: true,
+    proteinType: true,
+    cuisine: true,
+    ratingValue: true,
+    ratingCount: true,
+    isUserCreated: true,
+    isPdfImport: true,
+    householdStates: {
+      where: { householdId },
+      select: { isFavourite: true, isHidden: true },
+    },
+  } satisfies Prisma.RecipeSelect;
+}
 
-export type RecipeSummary = Prisma.RecipeGetPayload<{ select: typeof RECIPE_SUMMARY_SELECT }>;
+type RecipeSummaryRaw = Prisma.RecipeGetPayload<{ select: ReturnType<typeof recipeSummarySelect> }>;
 
-export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
+export type RecipeSummary = Omit<RecipeSummaryRaw, "householdStates"> & {
+  isFavourite: boolean;
+  isHidden: boolean;
+};
+
+function flattenSummary({ householdStates, ...rest }: RecipeSummaryRaw): RecipeSummary {
+  const state = householdStates[0];
+  return { ...rest, isFavourite: state?.isFavourite ?? false, isHidden: state?.isHidden ?? false };
+}
+
+export function buildWhere(params: RecipeListParams, householdId: string): Prisma.RecipeWhereInput {
   // Excludes scraped entries that aren't really a cookable recipe (see
   // isBrowsable's definition on the Recipe model for the exact rule) —
   // always applied, since those aren't a "similar recipe," they're broken
@@ -55,12 +76,21 @@ export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
   const where: Prisma.RecipeWhereInput = {
     isBrowsable: true,
     ...(params.showAll ? {} : { variantOfId: null }),
-    // Hidden recipes drop out of every default view (browse, suggest) the
-    // same way non-browsable ones do — except the hidden-recipes filter
-    // itself, which needs to show exactly the opposite so a hidden recipe
-    // can be found again and unhidden.
-    isHidden: params.hiddenOnly ? true : false,
   };
+
+  const householdConditions: Prisma.RecipeWhereInput[] = [
+    // Hidden-by-this-household recipes drop out of every default view
+    // (browse, suggest) the same way non-browsable ones do — except the
+    // hidden-recipes filter itself, which needs to show exactly the
+    // opposite so a hidden recipe can be found again and unhidden.
+    params.hiddenOnly
+      ? { householdStates: { some: { householdId, isHidden: true } } }
+      : { householdStates: { none: { householdId, isHidden: true } } },
+  ];
+  if (params.favouritesOnly) {
+    householdConditions.push({ householdStates: { some: { householdId, isFavourite: true } } });
+  }
+  where.AND = householdConditions;
 
   if (params.proteinTypes && params.proteinTypes.length > 0) {
     where.proteinType = { in: params.proteinTypes };
@@ -85,9 +115,6 @@ export function buildWhere(params: RecipeListParams): Prisma.RecipeWhereInput {
       { name: { contains: params.search, mode: "insensitive" } },
       { subtitle: { contains: params.search, mode: "insensitive" } },
     ];
-  }
-  if (params.favouritesOnly) {
-    where.isFavourite = true;
   }
   if (params.importedOnly) {
     where.isPdfImport = true;
@@ -125,15 +152,18 @@ export interface RecipeListResult {
 }
 
 /** Filtered, paginated recipe list for the card browser. */
-export async function listRecipes(params: RecipeListParams = {}): Promise<RecipeListResult> {
+export async function listRecipes(
+  params: RecipeListParams,
+  householdId: string,
+): Promise<RecipeListResult> {
   const page = Math.max(1, params.page ?? 1);
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
-  const where = buildWhere(params);
+  const where = buildWhere(params, householdId);
 
   const [recipes, total] = await Promise.all([
     prisma.recipe.findMany({
       where,
-      select: RECIPE_SUMMARY_SELECT,
+      select: recipeSummarySelect(householdId),
       orderBy: buildOrderBy(params.sort),
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -141,7 +171,7 @@ export async function listRecipes(params: RecipeListParams = {}): Promise<Recipe
     prisma.recipe.count({ where }),
   ]);
 
-  return { recipes, total, page, pageSize };
+  return { recipes: recipes.map(flattenSummary), total, page, pageSize };
 }
 
 export interface RecipeIngredientSetForSuggestion {
@@ -153,10 +183,11 @@ export interface RecipeIngredientSetForSuggestion {
   ingredientIds: string[];
 }
 
-// How long a recipe sits out of the suggestion pool after appearing in a
-// /suggest result — long enough that "suggest a week" doesn't just show the
-// same handful of top-rated recipes on every visit, short enough that a
-// heavily-filtered pool doesn't run dry. See listRecipeIngredientSetsForSuggestion.
+// How long a recipe sits out of a household's suggestion pool after
+// appearing in one of its /suggest results — long enough that "suggest a
+// week" doesn't just show the same handful of top-rated recipes on every
+// visit, short enough that a heavily-filtered pool doesn't run dry. See
+// listRecipeIngredientSetsForSuggestion.
 const SUGGESTION_COOLDOWN_DAYS = 14;
 
 /**
@@ -168,21 +199,26 @@ const SUGGESTION_COOLDOWN_DAYS = 14;
  * the greedy optimizer to find good combinations, and this needs to load
  * entirely into memory to run.
  *
- * Excludes recently-suggested recipes (see SUGGESTION_COOLDOWN_DAYS) by
- * default — pass `excludeRecentlySuggested: false` to opt out, which the
- * caller does as a fallback when the exclusion would leave too small a pool
- * to suggest from (see suggest/page.tsx).
+ * Excludes recipes recently suggested to this household (see
+ * SUGGESTION_COOLDOWN_DAYS) by default — pass `excludeRecentlySuggested:
+ * false` to opt out, which the caller does as a fallback when the
+ * exclusion would leave too small a pool to suggest from (see
+ * suggest/page.tsx).
  */
 export async function listRecipeIngredientSetsForSuggestion(
   params: RecipeListParams,
+  householdId: string,
   cap = 400,
   { excludeRecentlySuggested = true }: { excludeRecentlySuggested?: boolean } = {},
 ): Promise<RecipeIngredientSetForSuggestion[]> {
-  const where = buildWhere(params);
+  const where = buildWhere(params, householdId);
   if (excludeRecentlySuggested) {
     const cutoff = new Date(Date.now() - SUGGESTION_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
     const existingAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
-    where.AND = [...existingAnd, { OR: [{ lastSuggestedAt: null }, { lastSuggestedAt: { lt: cutoff } }] }];
+    where.AND = [
+      ...existingAnd,
+      { householdStates: { none: { householdId, lastSuggestedAt: { gte: cutoff } } } },
+    ];
   }
   const recipes = await prisma.recipe.findMany({
     where,
@@ -208,13 +244,17 @@ export async function listRecipeIngredientSetsForSuggestion(
   }));
 }
 
-/** Stamps lastSuggestedAt on every recipe that appeared in a /suggest result — not just the option the user picks, since the bug this exists to fix (the same recipes repeating) is about what gets *shown*, not what gets chosen. See listRecipeIngredientSetsForSuggestion's cooldown exclusion. */
-export async function markRecipesSuggested(recipeIds: string[]): Promise<void> {
+/** Stamps lastSuggestedAt (for this household) on every recipe that appeared in a /suggest result — not just the option the user picks, since the bug this exists to fix (the same recipes repeating) is about what gets *shown*, not what gets chosen. See listRecipeIngredientSetsForSuggestion's cooldown exclusion. */
+export async function markRecipesSuggested(recipeIds: string[], householdId: string): Promise<void> {
   if (recipeIds.length === 0) return;
-  await prisma.recipe.updateMany({
-    where: { id: { in: recipeIds } },
-    data: { lastSuggestedAt: new Date() },
-  });
+  const now = new Date();
+  for (const recipeId of recipeIds) {
+    await prisma.householdRecipeState.upsert({
+      where: { householdId_recipeId: { householdId, recipeId } },
+      create: { householdId, recipeId, lastSuggestedAt: now },
+      update: { lastSuggestedAt: now },
+    });
+  }
 }
 
 export interface RecipeMatch {
@@ -252,26 +292,27 @@ const MATCH_RESULTS_CAP = 60;
 export async function matchRecipesByIngredients(
   ingredientIds: string[],
   params: RecipeListParams,
+  householdId: string,
 ): Promise<RecipeMatchResult> {
   if (ingredientIds.length === 0) return { matches: [], poolSize: 0 };
 
   const haveIds = new Set(ingredientIds);
-  const where = buildWhere(params);
+  const where = buildWhere(params, householdId);
   where.ingredients = { some: { ingredientId: { in: ingredientIds } } };
 
   const recipes = await prisma.recipe.findMany({
     where,
     select: {
-      ...RECIPE_SUMMARY_SELECT,
+      ...recipeSummarySelect(householdId),
       ingredients: { select: { ingredient: { select: { id: true, canonicalName: true } } } },
     },
     take: MATCH_POOL_CAP,
   });
 
-  const matches: RecipeMatch[] = recipes.map(({ ingredients, ...summary }) => {
+  const matches: RecipeMatch[] = recipes.map(({ ingredients, ...raw }) => {
     const missing = ingredients.filter((i) => !haveIds.has(i.ingredient.id));
     return {
-      recipe: summary,
+      recipe: flattenSummary(raw),
       matchCount: ingredients.length - missing.length,
       totalCount: ingredients.length,
       missingIngredientNames: missing.map((i) => i.ingredient.canonicalName).sort(),
@@ -324,20 +365,32 @@ const VARIANT_SUMMARY_SELECT = {
   subtitle: true,
 } satisfies Prisma.RecipeSelect;
 
-export type RecipeDetail = Prisma.RecipeGetPayload<{
-  include: {
-    ingredients: { include: { ingredient: true } };
-    variants: { select: typeof VARIANT_SUMMARY_SELECT };
-  };
-}>;
-
-/** Full recipe detail — ingredients (with canonical names), instructions, and any detected near-duplicate variants — for the detail view. */
-export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null> {
-  return prisma.recipe.findUnique({
-    where: { slug },
-    include: {
-      ingredients: { include: { ingredient: true } },
-      variants: { select: VARIANT_SUMMARY_SELECT },
+function recipeDetailInclude(householdId: string) {
+  return {
+    ingredients: { include: { ingredient: true } },
+    variants: { select: VARIANT_SUMMARY_SELECT },
+    householdStates: {
+      where: { householdId },
+      select: { isFavourite: true, isHidden: true },
     },
+  } satisfies Prisma.RecipeInclude;
+}
+
+type RecipeDetailRaw = Prisma.RecipeGetPayload<{ include: ReturnType<typeof recipeDetailInclude> }>;
+
+export type RecipeDetail = Omit<RecipeDetailRaw, "householdStates"> & {
+  isFavourite: boolean;
+  isHidden: boolean;
+};
+
+/** Full recipe detail — ingredients (with canonical names), instructions, this household's favourite/hidden state, and any detected near-duplicate variants — for the detail view. */
+export async function getRecipeBySlug(slug: string, householdId: string): Promise<RecipeDetail | null> {
+  const recipe = await prisma.recipe.findUnique({
+    where: { slug },
+    include: recipeDetailInclude(householdId),
   });
+  if (!recipe) return null;
+  const { householdStates, ...rest } = recipe;
+  const state = householdStates[0];
+  return { ...rest, isFavourite: state?.isFavourite ?? false, isHidden: state?.isHidden ?? false };
 }

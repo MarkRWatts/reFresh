@@ -10,6 +10,7 @@ import { hasUsableImage } from "@/lib/recipes/imageUrl";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
 import { updateRecipeFields } from "@/lib/recipes/recipeEditActions";
 import { parseRecipeSteps } from "@/lib/recipes/steps";
+import { requireMemberOrRedirect } from "@/lib/require-member";
 
 export default async function EditRecipePage({
   params,
@@ -17,7 +18,8 @@ export default async function EditRecipePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const recipe = await getRecipeBySlug(slug);
+  const { householdId } = await requireMemberOrRedirect();
+  const recipe = await getRecipeBySlug(slug, householdId);
   if (!recipe) notFound();
   if (!recipe.isUserCreated) redirect(`/recipes/${slug}`);
 

@@ -49,9 +49,10 @@ export interface IngredientReviewResult {
  * to surface likely-duplicate stragglers.
  *
  * "Usage" here means recipes that would actually appear in the app
- * (isBrowsable, not isHidden — the same filter buildWhere applies to
- * browse/suggest/pantry-match), not a raw count of every scraped
- * RecipeIngredient row. HelloFresh's catalog carries a lot of dead weight
+ * (isBrowsable — this is a global catalog-curation tool, not scoped to any
+ * one household's hidden-recipe preferences, so isHidden isn't part of
+ * this filter), not a raw count of every scraped RecipeIngredient row.
+ * HelloFresh's catalog carries a lot of dead weight
  * — draft/test/removed recipes that never show up anywhere a user would
  * actually see them (see Recipe.isBrowsable's doc comment) — and counting
  * those inflated even the most common ingredients by ~30% in a spot check
@@ -88,7 +89,7 @@ export async function listIngredientsForReview(
     }),
     prisma.recipeIngredient.groupBy({
       by: ["ingredientId"],
-      where: { recipe: { isBrowsable: true, isHidden: false } },
+      where: { recipe: { isBrowsable: true } },
       _count: { _all: true },
     }),
     prisma.recipeIngredient.groupBy({

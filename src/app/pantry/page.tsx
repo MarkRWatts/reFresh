@@ -5,23 +5,25 @@ import RecipeCard from "@/components/RecipeCard";
 import { getCurrentPlanRecipeIds } from "@/lib/mealplan/queries";
 import { getIngredientsByIds, listCuisines, matchRecipesByIngredients } from "@/lib/recipes/queries";
 import { parseFilters, toListParams, type RawSearchParams } from "@/lib/recipes/searchParamsUtil";
+import { requireMemberOrRedirect } from "@/lib/require-member";
 
 export default async function PantryPage({
   searchParams,
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
+  const { householdId } = await requireMemberOrRedirect();
   const filters = parseFilters(await searchParams);
 
   const [selectedIngredients, cuisines, planRecipeIds] = await Promise.all([
     getIngredientsByIds(filters.ingredientIds),
     listCuisines(),
-    getCurrentPlanRecipeIds(),
+    getCurrentPlanRecipeIds(householdId),
   ]);
 
   const { matches, poolSize } =
     filters.ingredientIds.length > 0
-      ? await matchRecipesByIngredients(filters.ingredientIds, toListParams(filters, 60))
+      ? await matchRecipesByIngredients(filters.ingredientIds, toListParams(filters, 60), householdId)
       : { matches: [], poolSize: 0 };
 
   return (

@@ -1,14 +1,13 @@
 import { prisma } from "@/lib/db";
 
-/**
- * This is a personal, single-user app with no auth, so there's just one
- * implicit "current" plan rather than named/multiple saved plans — created
- * lazily on first use.
- */
-export async function getOrCreateCurrentMealPlan() {
-  const existing = await prisma.mealPlan.findFirst({ orderBy: { createdAt: "asc" } });
+/** One implicit "current" plan per household — created lazily on first use, same single-implicit-plan pattern as before households existed, just re-scoped. */
+export async function getOrCreateCurrentMealPlan(householdId: string) {
+  const existing = await prisma.mealPlan.findFirst({
+    where: { householdId },
+    orderBy: { createdAt: "asc" },
+  });
   if (existing) return existing;
-  return prisma.mealPlan.create({ data: { label: "This week" } });
+  return prisma.mealPlan.create({ data: { label: "This week", householdId } });
 }
 
 export interface PlannedRecipe {
@@ -23,8 +22,8 @@ export interface PlannedRecipe {
   planServings: number | null;
 }
 
-export async function getCurrentPlanRecipes(): Promise<PlannedRecipe[]> {
-  const plan = await getOrCreateCurrentMealPlan();
+export async function getCurrentPlanRecipes(householdId: string): Promise<PlannedRecipe[]> {
+  const plan = await getOrCreateCurrentMealPlan(householdId);
   const rows = await prisma.mealPlanRecipe.findMany({
     where: { mealPlanId: plan.id },
     select: {
@@ -45,8 +44,8 @@ export async function getCurrentPlanRecipes(): Promise<PlannedRecipe[]> {
 }
 
 /** Just the recipe ids currently planned, for cheaply checking "is this recipe already in the plan" while rendering cards. */
-export async function getCurrentPlanRecipeIds(): Promise<Set<string>> {
-  const plan = await getOrCreateCurrentMealPlan();
+export async function getCurrentPlanRecipeIds(householdId: string): Promise<Set<string>> {
+  const plan = await getOrCreateCurrentMealPlan(householdId);
   const rows = await prisma.mealPlanRecipe.findMany({
     where: { mealPlanId: plan.id },
     select: { recipeId: true },

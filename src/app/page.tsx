@@ -11,6 +11,7 @@ import {
   toListParams,
   type RawSearchParams,
 } from "@/lib/recipes/searchParamsUtil";
+import { requireMemberOrRedirect } from "@/lib/require-member";
 
 const PAGE_SIZE = 24;
 
@@ -19,12 +20,13 @@ export default async function Home({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
+  const { householdId } = await requireMemberOrRedirect();
   const filters = parseFilters(await searchParams);
 
   const [{ recipes, total }, cuisines, planRecipeIds] = await Promise.all([
-    listRecipes(toListParams(filters, PAGE_SIZE)),
+    listRecipes(toListParams(filters, PAGE_SIZE), householdId),
     listCuisines(),
-    getCurrentPlanRecipeIds(),
+    getCurrentPlanRecipeIds(householdId),
   ]);
 
   return (

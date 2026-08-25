@@ -3,6 +3,7 @@ import CopyListButton from "@/components/CopyListButton";
 import PrintButton from "@/components/PrintButton";
 import { getCurrentPlanRecipes } from "@/lib/mealplan/queries";
 import { computeSharedIngredients, type IngredientGroup } from "@/lib/recipes/sharedIngredients";
+import { requireMemberOrRedirect } from "@/lib/require-member";
 
 function formatQuantity(unit: string | null, totalQuantity: number): string {
   const rounded = Math.round(totalQuantity * 100) / 100;
@@ -26,7 +27,8 @@ function buildPlainTextList(ingredientGroups: IngredientGroup[]): string {
 }
 
 export default async function PlanPrintPage() {
-  const recipes = await getCurrentPlanRecipes();
+  const { householdId } = await requireMemberOrRedirect();
+  const recipes = await getCurrentPlanRecipes(householdId);
   const servingsOverrides = new Map(
     recipes.filter((r) => r.planServings != null).map((r) => [r.id, r.planServings!]),
   );

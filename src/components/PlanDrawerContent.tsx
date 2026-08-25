@@ -10,8 +10,8 @@ function formatQuantity(unit: string | null, totalQuantity: number): string {
   return unit ? `${rounded} ${unit}` : `${rounded}`;
 }
 
-export default async function PlanDrawerContent() {
-  const recipes = await getCurrentPlanRecipes();
+export default async function PlanDrawerContent({ householdId }: { householdId: string }) {
+  const recipes = await getCurrentPlanRecipes(householdId);
 
   if (recipes.length === 0) {
     return (

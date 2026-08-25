@@ -15,6 +15,7 @@ import { localRecipeImageDimensions } from "@/lib/pdfImport/imageStorage";
 import { getRecipeBySlug } from "@/lib/recipes/queries";
 import { parseRecipeSteps } from "@/lib/recipes/steps";
 import { cloneRecipe } from "@/lib/recipes/customRecipeActions";
+import { requireMemberOrRedirect } from "@/lib/require-member";
 
 function Badge({ className, children }: { className: string; children: React.ReactNode }) {
   return (
@@ -39,11 +40,12 @@ export default async function RecipeDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const recipe = await getRecipeBySlug(slug);
+  const { householdId } = await requireMemberOrRedirect();
+  const recipe = await getRecipeBySlug(slug, householdId);
   if (!recipe) notFound();
   const steps = parseRecipeSteps(recipe.steps);
   const coverDimensions = hasUsableImage(recipe.imageUrl) ? await localRecipeImageDimensions(recipe.imageUrl) : null;
-  const planRecipeIds = await getCurrentPlanRecipeIds();
+  const planRecipeIds = await getCurrentPlanRecipeIds(householdId);
   const hasNutrition = [
     recipe.calories,
     recipe.fatGrams,

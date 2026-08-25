@@ -9,6 +9,157 @@ datasource db {
   provider = "postgresql"
 }
 
+// --- Auth models (Better Auth) ---
+//
+// Native Better Auth field names/types throughout — no @map aliasing needed,
+// since there's no pre-existing auth schema to stay column-compatible with
+// (unlike a migration off some other auth library).
+
+model User {
+  id            String   @id @default(cuid())
+  name          String?
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  // Multi-tenancy (organization plugin, renamed — see auth.ts). A user
+  // belongs to at most one household in practice (enforced in auth.ts's
+  // organizationLimit + the accept-invite route), but the relation itself
+  // is a list because that's the plugin's shape.
+  members     Member[]
+  invitations Invitation[] // invitations this user has sent, as inviter
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  scope                 String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Added by the organization plugin (renamed from activeOrganizationId).
+  // Tracks which household this session is "in" — a bare id column, not a
+  // Prisma relation, matching how Better Auth itself manages it.
+  activeHouseholdId String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+}
+
+// --- Multi-tenancy (Better Auth organization plugin, renamed) ---
+//
+// Household/Member/Invitation are the plugin's Organization/Member/
+// Invitation models, renamed via auth.ts's `schema.*.modelName`/`fields` to
+// match this app's own domain language — shapes and endpoints are
+// otherwise the plugin's own.
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  // Required by the plugin; not currently exposed anywhere in the UI.
+  slug      String   @unique
+  logo      String?
+  metadata  String? // JSON-encoded; unused today
+  createdAt DateTime @default(now())
+
+  members     Member[]
+  invitations Invitation[]
+
+  mealPlans      MealPlan[]
+  recipeStates   HouseholdRecipeState[]
+}
+
+model Member {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("member") // "owner" | "member" — see auth.ts's creatorRole
+  createdAt   DateTime  @default(now())
+
+  @@index([householdId])
+  @@index([userId])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  // A hint for the invite UI (e.g. "invited emma@..."), NOT an authorization
+  // check — redemption is by token (the invitation's own id), same as
+  // jinglejotter.com's equivalent design.
+  email       String
+  role        String?
+  status      String    @default("pending") // pending | accepted | rejected | canceled
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  inviterId   String
+  inviter     User      @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@index([email])
+}
+
+// Per-household state on a recipe from the otherwise-shared catalog:
+// favourite/hidden toggles and suggestion-cooldown tracking. Recipe itself
+// stays global (no householdId of its own) since every household browses
+// the same catalog — see project-plan.md Phase 16.
+model HouseholdRecipeState {
+  id              String    @id @default(cuid())
+  householdId     String
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  recipeId        String
+  recipe          Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  isFavourite     Boolean   @default(false)
+  isHidden        Boolean   @default(false)
+  // Stamped whenever this recipe appears in any /suggest result for this
+  // household (not just the one picked) — see markRecipesSuggested.
+  lastSuggestedAt DateTime?
+
+  @@unique([householdId, recipeId])
+  @@index([recipeId])
+  @@index([householdId, isFavourite])
+  @@index([householdId, isHidden])
+}
+
 enum ProteinType {
   CHICKEN
   TURKEY
@@ -103,26 +254,6 @@ model Recipe {
   variantOfId    String?
   variantOf      Recipe?     @relation("RecipeVariants", fields: [variantOfId], references: [id])
   variants       Recipe[]    @relation("RecipeVariants")
-  // Single-user favourite flag (no auth, no per-user table — same
-  // single-implicit-owner pattern as MealPlan). Toggled from the card and
-  // detail page; also usable as a filter.
-  isFavourite    Boolean     @default(false)
-  // A user-hidden auto-imported (HelloFresh-scraped) recipe — "I don't want
-  // to see this again," reversible, unlike deleting a custom/PDF recipe
-  // (which just removes the row — see recipeEditActions.ts's deleteRecipe).
-  // Always excluded from buildWhere() the same way isBrowsable is, unless
-  // explicitly asked for via the hiddenOnly filter, so it can be found again
-  // and unhidden. Distinct from isBrowsable: that's "is this even a real
-  // recipe" computed at scrape time, this is a personal preference toggle.
-  isHidden       Boolean     @default(false)
-  // Stamped whenever this recipe appears in any /suggest result (not just
-  // the one the user picks — see suggest/page.tsx), so a subsequent
-  // /suggest call can exclude recently-suggested recipes from the candidate
-  // pool (see listRecipeIngredientSetsForSuggestion). Fixes a reported bug
-  // where the same recipes kept coming back on every visit — the candidate
-  // pool was a deterministic top-rated query with no memory of what had
-  // already been shown.
-  lastSuggestedAt DateTime?
   // True for a recipe created by cloning + editing an existing one (see
   // clonedFromId below), rather than scraped from HelloFresh. hfId/slug are
   // still populated (with a synthetic hfId) so it fits the same unique-key
@@ -149,6 +280,7 @@ model Recipe {
 
   ingredients      RecipeIngredient[]
   mealPlanRecipes  MealPlanRecipe[]
+  householdStates  HouseholdRecipeState[]
 
   @@index([proteinType])
   @@index([cuisine])
@@ -156,10 +288,7 @@ model Recipe {
   @@index([cookMinutes])
   @@index([isBrowsable])
   @@index([variantOfId])
-  @@index([isFavourite])
-  @@index([isHidden])
   @@index([clonedFromId])
-  @@index([lastSuggestedAt])
 }
 
 model Ingredient {
@@ -228,11 +357,15 @@ model RecipeIngredient {
 }
 
 model MealPlan {
-  id        String   @id @default(cuid())
-  label     String
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  label       String
+  createdAt   DateTime  @default(now())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   recipes MealPlanRecipe[]
+
+  @@index([householdId])
 }
 
 model MealPlanRecipe {

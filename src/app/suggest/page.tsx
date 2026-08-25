@@ -10,6 +10,7 @@ import {
   toListParams,
   type RawSearchParams,
 } from "@/lib/recipes/searchParamsUtil";
+import { requireMemberOrRedirect } from "@/lib/require-member";
 
 const MEAL_COUNT_OPTIONS = [2, 3, 4, 5];
 const CANDIDATE_POOL_CAP = 400;
@@ -19,20 +20,21 @@ export default async function SuggestPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
+  const { householdId } = await requireMemberOrRedirect();
   const raw = await searchParams;
   const filters = parseFilters(raw);
   const rawCount = Number.parseInt(Array.isArray(raw.n) ? raw.n[0] : (raw.n ?? "3"), 10);
   const count = MEAL_COUNT_OPTIONS.includes(rawCount) ? rawCount : 3;
 
   const listParams = toListParams(filters, CANDIDATE_POOL_CAP);
-  let pool = await listRecipeIngredientSetsForSuggestion(listParams, CANDIDATE_POOL_CAP);
+  let pool = await listRecipeIngredientSetsForSuggestion(listParams, householdId, CANDIDATE_POOL_CAP);
   // A heavily-filtered pool can be small enough that excluding recently-
   // suggested recipes (the default — see listRecipeIngredientSetsForSuggestion)
   // leaves too few to suggest from at all; falling back to the unfiltered
   // pool beats showing nothing. Recently-suggested recipes still get
   // deprioritized naturally by pickSeeds' quality-based seeding either way.
   if (pool.length < count) {
-    pool = await listRecipeIngredientSetsForSuggestion(listParams, CANDIDATE_POOL_CAP, {
+    pool = await listRecipeIngredientSetsForSuggestion(listParams, householdId, CANDIDATE_POOL_CAP, {
       excludeRecentlySuggested: false,
     });
   }
@@ -59,7 +61,7 @@ export default async function SuggestPage({
 
   // Every recipe actually *shown* counts as "suggested," not just whichever
   // option the user goes on to pick — see markRecipesSuggested.
-  await markRecipesSuggested(combinations.flatMap((c) => c.recipeIds));
+  await markRecipesSuggested(combinations.flatMap((c) => c.recipeIds), householdId);
 
   const filterQueryString = buildFilterQueryString(filters);
   const mealCountHref = (n: number) => {

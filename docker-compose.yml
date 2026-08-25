@@ -23,6 +23,14 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-refresh}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-refresh}?schema=public
       RECIPE_IMAGES_DIR: /app/storage/recipe-images
+      # Multi-household auth (Better Auth) — see .env.docker.example and
+      # DEPLOYMENT.md's Google/Resend setup steps.
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env.docker}
+      AUTH_URL: ${AUTH_URL:?set AUTH_URL in .env.docker}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?set AUTH_TRUSTED_ORIGINS in .env.docker}
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:?set AUTH_GOOGLE_ID in .env.docker}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:?set AUTH_GOOGLE_SECRET in .env.docker}
+      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env.docker}
     volumes:
       # Scraper's HTML cache — keeps re-scrapes/reprocesses from re-downloading
       # every recipe page. Also where the PDF-import OCR engine's language
