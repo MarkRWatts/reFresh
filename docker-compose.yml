@@ -31,6 +31,9 @@ services:
       AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:?set AUTH_GOOGLE_ID in .env.docker}
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:?set AUTH_GOOGLE_SECRET in .env.docker}
       RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env.docker}
+      # Optional — empty/unset means the app-level sign-in gate is off
+      # (see src/auth.ts's isAllowedEmail and DEPLOYMENT.md's Going public 3b).
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
     volumes:
       # Scraper's HTML cache — keeps re-scrapes/reprocesses from re-downloading
       # every recipe page. Also where the PDF-import OCR engine's language
