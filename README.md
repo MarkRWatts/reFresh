@@ -36,7 +36,7 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - **Custom & imported recipes**: clone any recipe to edit, or import one from a scanned/photographed card — a "My recipe" / "From a card scan" badge distinguishes these from the scraped catalog. The full editor (name, subtitle, cook time, ingredients, nutrition, steps, cover photo) is available for any of these, with protein-type classification re-derived automatically as you edit, plus a confirm-guarded delete. See [Importing recipes from a scan](#importing-recipes-from-a-scan) for the two ways to do the import itself. Shared across every household, same as the rest of the catalog.
 - **Hide auto-imported recipes**: reversible per-recipe hide (distinct from deleting, which is only for custom/imported recipes) with a "Hidden" filter to find and unhide them — per household, same as favourites.
 - **Ingredient review** (`/ingredients/review`): admin tool for HelloFresh's inevitable naming/unit inconsistencies — rename/merge duplicate ingredients, tag categories, research real pack sizes so the shopping list can convert "1 pot" into a summable amount, and bulk-apply the resulting conversions across every affected recipe. Global (any signed-in user), not household-scoped — it's curating the shared catalog, not personal state. Not linked from the main nav; reach it directly at `/ingredients/review`.
-- **Multi-household accounts**: Google or magic-link sign-in (Better Auth). Every household browses, plans, and clones from the exact same recipe catalog, but keeps its own favourites, hidden list, and this week's plan completely separate from every other household. From `/account`: rename the household, invite others by link, promote/demote/remove members, and delete your own account (deleting a household's sole owner's account takes the whole household with it — confirmed by typing its name). See [Authentication & households](#authentication--households).
+- **Multi-household accounts**: Google or magic-link sign-in (Better Auth). Every household browses, plans, and clones from the exact same recipe catalog, but keeps its own favourites, hidden list, and this week's plan completely separate from every other household. From `/account`: rename the household, invite others by email or link (to your household, or — via a tickbox — an app-only invite so they start their own), promote/demote/remove members, and delete your own account (deleting a household's sole owner's account takes the whole household with it — confirmed by typing its name). See [Authentication & households](#authentication--households).
 
 ## Stack
 
@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000) — every route redirects to
 
 ## Authentication & households
 
-Every route requires a signed-in session with household membership — [`src/proxy.ts`](src/proxy.ts) redirects everything except `/signin` and `/invite/[token]` to sign-in at the edge (a cheap cookie-presence check only; the real check is `auth.api.getSession()` against the database, done in each page/action). Sign-in itself is fully open — anyone can create an account and start their own household against the shared catalog; there's no email allowlist. A signed-in user with no household lands on `/onboarding` to create one or redeem an invite link.
+Every route requires a signed-in session with household membership — [`src/proxy.ts`](src/proxy.ts) redirects everything except `/signin` and `/invite/[token]` to sign-in at the edge (a cheap cookie-presence check only; the real check is `auth.api.getSession()` against the database, done in each page/action). Sign-in is gated by the optional `ALLOWED_EMAILS` allowlist (`src/auth.ts`): empty/unset means anyone can sign in and start their own household against the shared catalog — the local-dev default — while production sets it to the invited guest list (and layers Cloudflare Access in front on the public path; see `DEPLOYMENT.md`'s "Going public"). A signed-in user with no household lands on `/onboarding` to create one or redeem an invite link.
 
 `.env` needs, beyond `DATABASE_URL` (see `.env.example` for the full set with comments):
 
@@ -74,11 +74,12 @@ Every route requires a signed-in session with household membership — [`src/pro
 | `AUTH_SECRET` | Better Auth's session/cookie signing secret — `openssl rand -base64 32` |
 | `AUTH_URL` / `AUTH_TRUSTED_ORIGINS` | Better Auth's own base URL (it doesn't infer this from the request) and CSRF origin allowlist — `http://localhost:3000` for local dev |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth client (Google Cloud Console → APIs & Services → Credentials → Web application), redirect URI `<AUTH_URL>/api/auth/callback/google` |
-| `RESEND_API_KEY` | Sends magic-link emails via Resend's HTTP API (`src/lib/email.ts`) — the sending domain needs SPF/DKIM/DMARC verified in Resend |
+| `RESEND_API_KEY` | Sends the transactional emails — magic-link sign-in, household invites, and app-only invites — via Resend's HTTP API (`src/lib/email.ts`); the sending domain needs SPF/DKIM/DMARC verified in Resend |
+| `ALLOWED_EMAILS` | Optional comma-separated sign-in allowlist (case-insensitive). Empty/unset = gate off; when set, any other email is refused a session regardless of sign-in method |
 
 Google sign-in works without `RESEND_API_KEY` set; magic-link sign-in doesn't need real Google credentials. Either alone is enough to develop against locally.
 
-**Household model**: `Household`/`Member`/`Invitation` are Better Auth's `organization` plugin, renamed to this app's own domain language (see `src/auth.ts`). One household per user, enforced both at creation (`organizationLimit`) and invite-redemption time. Invites are redeemed by token (the invitation row's own id), not matched against the invitee's email — the email on an invitation is just a hint shown in the invite UI. `src/lib/require-member.ts`'s `requireMember()`/`requireMemberOrRedirect()` is the one place every mutating action and protected page resolves "which household is this for" — see [How it works § household-scoped data](#household-scoped-data) for why that matters more than usual here.
+**Household model**: `Household`/`Member`/`Invitation` are Better Auth's `organization` plugin, renamed to this app's own domain language (see `src/auth.ts`). One household per user, enforced both at creation (`organizationLimit`) and invite-redemption time. Invites are redeemed by token (the invitation row's own id), not matched against the invitee's email — the invitee is emailed the join link, but the email on an invitation stays a delivery address and UI hint, never an authorization check. The invite form's tickbox switches to an **app-only invite**: no `Invitation` row at all, just a branded come-try-re:Fresh email pointing at `/signin`, for inviting someone to start their own household without ever seeing yours. `src/lib/require-member.ts`'s `requireMember()`/`requireMemberOrRedirect()` is the one place every mutating action and protected page resolves "which household is this for" — see [How it works § household-scoped data](#household-scoped-data) for why that matters more than usual here.
 
 ## Populating the database
 
@@ -222,7 +223,7 @@ src/
     mealplan/                 # the (household-scoped) weekly plan: queries, actions, auto-suggest
     favourites/                # favourite toggle action (household-scoped)
     require-member.ts          # requireMember()/requireMemberOrRedirect() — the household-scoping choke point
-    email.ts                   # branded transactional email (magic-link sign-in) via Resend's HTTP API
+    email.ts                   # branded transactional email (magic link, household + app invites) via Resend's HTTP API
     brand/                     # 16/32/48px icon sources for favicon.ico
   generated/prisma/           # Prisma client output (gitignored, regenerated via `prisma generate`)
 ```
