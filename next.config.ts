@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    remotePatterns: [{ protocol: "https", hostname: "img.hellofresh.com" }],
+    remotePatterns: [
+      { protocol: "https", hostname: "img.hellofresh.com" },
+      // Google account profile pictures (User.image, set by Better Auth on
+      // Google sign-in) — see the header avatar in src/app/layout.tsx.
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+    ],
   },
   devIndicators: false,
   experimental: {

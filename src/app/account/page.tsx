@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { CircleUserRound, Home, Mail, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireMemberOrRedirect } from "@/lib/require-member";
@@ -21,7 +22,7 @@ export default async function AccountPage() {
   const [user, household] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { name: true, email: true },
+      select: { name: true, email: true, image: true },
     }),
     // The household name and member list are visible to every member, not
     // just owners — only the pending-invitations query (and the invite/
@@ -48,12 +49,22 @@ export default async function AccountPage() {
       </header>
 
       <section className="flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-4">
-        <span
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xl font-semibold text-emerald-700"
-          aria-hidden="true"
-        >
-          {initial(user.name, user.email)}
-        </span>
+        {user.image ? (
+          <Image
+            src={user.image}
+            alt=""
+            width={56}
+            height={56}
+            className="h-14 w-14 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xl font-semibold text-emerald-700"
+            aria-hidden="true"
+          >
+            {initial(user.name, user.email)}
+          </span>
+        )}
         <div className="flex flex-col">
           <span className="text-base font-semibold text-zinc-900">{user.name ?? "No name set"}</span>
           {user.email && <span className="text-sm text-zinc-500">{user.email}</span>}

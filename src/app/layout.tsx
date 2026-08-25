@@ -75,12 +75,22 @@ export default async function RootLayout({
                     href="/account"
                     className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-zinc-100"
                   >
-                    <span
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
-                      aria-hidden="true"
-                    >
-                      {initial(session.user.name, session.user.email)}
-                    </span>
+                    {session.user.image ? (
+                      <Image
+                        src={session.user.image}
+                        alt=""
+                        width={28}
+                        height={28}
+                        className="h-7 w-7 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
+                        aria-hidden="true"
+                      >
+                        {initial(session.user.name, session.user.email)}
+                      </span>
+                    )}
                     <span className="max-w-[8rem] truncate text-sm font-medium text-zinc-700">
                       {session.user.name ?? session.user.email}
                     </span>
