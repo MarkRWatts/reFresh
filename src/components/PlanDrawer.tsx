@@ -18,7 +18,7 @@ export default function PlanDrawer({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="ml-auto flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
+        className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
       >
         This week
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs">

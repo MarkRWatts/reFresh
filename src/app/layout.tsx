@@ -25,6 +25,10 @@ export const metadata: Metadata = {
   description: "Browse HelloFresh recipes and plan a week that shares ingredients, not waste.",
 };
 
+function initial(name: string | null | undefined, email: string | null | undefined): string {
+  return (name ?? email ?? "?").trim().charAt(0).toUpperCase() || "?";
+}
+
 // Every page renders PlanDrawerRoot, which queries the DB — nothing under
 // this layout can be statically prerendered (there's no DB at build time).
 export const dynamic = "force-dynamic";
@@ -63,17 +67,25 @@ export default async function RootLayout({
                 priority
               />
             </Link>
-            {member && <PlanDrawerRoot householdId={member.householdId} />}
             <div className="ml-auto flex items-center gap-3">
+              {member && <PlanDrawerRoot householdId={member.householdId} />}
               {session?.user ? (
                 <>
                   <Link
                     href="/account"
-                    className="text-sm font-medium text-zinc-600 hover:text-zinc-900"
+                    className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-zinc-100"
                   >
-                    Account
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
+                      aria-hidden="true"
+                    >
+                      {initial(session.user.name, session.user.email)}
+                    </span>
+                    <span className="max-w-[8rem] truncate text-sm font-medium text-zinc-700">
+                      {session.user.name ?? session.user.email}
+                    </span>
                   </Link>
-                  <SignOutButton compact />
+                  <SignOutButton />
                 </>
               ) : (
                 <Link
