@@ -27,6 +27,39 @@ function isAllowedEmail(email: string | null | undefined): boolean {
 // the email at all means a stranger who types some other address into the
 // sign-in form never learns this app exists or that they were rejected —
 // and never consumes Resend quota.
+// Unlike sendMagicLinkEmail, this always sends: the recipient was chosen
+// deliberately by an already-signed-in household owner, not typed into a
+// public form by an anonymous visitor, so there's no "stranger probing for
+// whether this app exists" concern. (The invitee may still hit the
+// ALLOWED_EMAILS wall at sign-in time — that's a separate, deliberate gate.)
+async function sendInvitationEmail(data: {
+  id: string;
+  email: string;
+  organization: { name: string };
+  inviter: { user: { name: string | null; email: string } };
+}) {
+  const baseUrl = process.env.AUTH_URL ?? "";
+  const url = `${baseUrl}/invite/${data.id}`;
+  const inviterName = data.inviter.user.name ?? data.inviter.user.email;
+  const { html, text } = renderBrandedEmail({
+    heading: `${inviterName} invited you to the ${data.organization.name} household`,
+    bodyHtml:
+      "<p>Join their household on re:Fresh to share the recipe catalog, favourites, and the weekly meal plan.</p>",
+    bodyText:
+      "Join their household on re:Fresh to share the recipe catalog, favourites, and the weekly meal plan.",
+    ctaLabel: "View invite",
+    ctaUrl: url,
+    footerText:
+      "This invite was sent from re:Fresh by a household owner. If you weren't expecting it, you can safely ignore this email.",
+  });
+  await sendEmail({
+    to: data.email,
+    subject: `${inviterName} invited you to join ${data.organization.name} on re:Fresh`,
+    html,
+    text,
+  });
+}
+
 async function sendMagicLinkEmail(email: string, url: string) {
   if (!isAllowedEmail(email)) return;
   const { html, text } = renderBrandedEmail({
@@ -118,6 +151,7 @@ export const auth = betterAuth({
       // never let the plugin's built-in delete-organization endpoint
       // remove one outright.
       disableOrganizationDeletion: true,
+      sendInvitationEmail,
     }),
     magicLink({
       expiresIn: 60 * 10, // 10 minutes

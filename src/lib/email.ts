@@ -17,6 +17,13 @@ const BRAND = {
 const FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
+// Downsized copies of the brand assets (public/brand/email-*.png), served
+// from the app itself. Mail clients fetch these unauthenticated, which
+// works because /brand is carved out of the Cloudflare Access gate by a
+// path-scoped Bypass application — see DEPLOYMENT.md's Going public notes.
+// Retina-sized at 2x their displayed 56px/26px.
+const EMAIL_ASSET_BASE = (process.env.AUTH_URL ?? "https://refresh.markrwatts.com").replace(/\/$/, "");
+
 export function renderBrandedEmail({
   heading,
   bodyHtml,
@@ -44,9 +51,17 @@ export function renderBrandedEmail({
         <td align="center" style="padding:32px 16px;">
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px; width:100%; background:${BRAND.tagCream}; border-radius:24px;">
             <tr>
-              <td style="padding:32px 32px 8px; text-align:center;">
-                <span style="font-size:20px; font-weight:700; color:${BRAND.zinc};">re:</span>
-                <span style="font-size:20px; font-weight:700; color:${BRAND.emerald};">Fresh</span>
+              <td style="padding:32px 32px 8px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" align="center">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <img src="${EMAIL_ASSET_BASE}/brand/email-icon.png" alt="re:Fresh" width="56" height="56" style="display:block; width:56px; height:56px; border-radius:12px;" />
+                    </td>
+                    <td style="vertical-align:middle; padding-left:12px;">
+                      <img src="${EMAIL_ASSET_BASE}/brand/email-wordmark.png" alt="" height="26" style="display:block; height:26px; width:auto;" />
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
