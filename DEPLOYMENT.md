@@ -1,8 +1,10 @@
 # VM deployment (TrueNAS)
 
+> **Placeholders, deliberately.** Hostnames, IPs, account/team names, and guest emails in this doc are genericized (`refresh.example.com`, `<vm-ip>`, …). The real values live in the private Confluence space **reFresh** → "Deployment — concrete values & sensitive notes".
+
 This documents how the app was moved from the Mac to its production home — the same Ubuntu Server VM on TrueNAS that [jobAppTracker](https://github.com/MarkRWatts/jobAppTracker) runs on, behind a **shared** Caddy reverse proxy. See [jobAppTracker's `DEPLOYMENT.md`](https://github.com/MarkRWatts/jobAppTracker/blob/main/DEPLOYMENT.md) for the base OS setup and the shared Caddy stack itself (`~/edge`) — this doc only covers what's specific to reFresh.
 
-**Live at**: `https://refresh.example.com` — LAN-only (no port-forwarding), real Let's Encrypt certificate. Going public is planned — see [Going public](#going-public-cloudflare-tunnel--access--pi-hole-split-dns) for the runbook. Multi-household auth (Google + magic-link, via Better Auth) as of Phase 16 — see [Multi-household auth](#multi-household-auth-phase-16) below for the Google/Resend setup and the one-time schema migration + backfill this needed. Sign-in happens over the browser reaching `https://refresh.markrwatts.com` directly, so it works fine LAN-only as long as that's true when someone signs in (true for this household in practice).
+**Live at**: `https://refresh.example.com` — LAN-only (no port-forwarding), real Let's Encrypt certificate. Going public is planned — see [Going public](#going-public-cloudflare-tunnel--access--pi-hole-split-dns) for the runbook. Multi-household auth (Google + magic-link, via Better Auth) as of Phase 16 — see [Multi-household auth](#multi-household-auth-phase-16) below for the Google/Resend setup and the one-time schema migration + backfill this needed. Sign-in happens over the browser reaching `https://refresh.example.com` directly, so it works fine LAN-only as long as that's true when someone signs in (true for this household in practice).
 
 ## 1. Prerequisites already in place
 
@@ -100,15 +102,15 @@ Adds Google + magic-link sign-in (Better Auth) and per-household favourites/hidd
 
 ### 1. Google OAuth client
 
-Google Cloud Console → APIs & Services → Credentials → create an OAuth client (type: Web application), separate from any other app's client (jobAppTracker, jinglejotter.com) so the credentials stay independent. Authorized redirect URI: `https://refresh.markrwatts.com/api/auth/callback/google`. Note the client ID/secret for `.env.docker` below.
+Google Cloud Console → APIs & Services → Credentials → create an OAuth client (type: Web application), separate from any other app's client (jobAppTracker, jinglejotter.com) so the credentials stay independent. Authorized redirect URI: `https://refresh.example.com/api/auth/callback/google`. Note the client ID/secret for `.env.docker` below.
 
 ### 2. Resend domain verification
 
-`refresh.markrwatts.com` verified in Resend for the `noreply@refresh.markrwatts.com` sending address (see `src/lib/email.ts`) — SPF/DKIM records added via Cloudflare, plus a DMARC record (`_dmarc.refresh` TXT `v=DMARC1; p=none;`, TTL Auto) on the `markrwatts.com` zone. Note the Resend API key for `.env.docker` below.
+`refresh.example.com` verified in Resend for the `noreply@refresh.example.com` sending address (see `src/lib/email.ts`) — SPF/DKIM records added via Cloudflare, plus a DMARC record (`_dmarc.refresh` TXT `v=DMARC1; p=none;`, TTL Auto) on the apex zone. Note the Resend API key for `.env.docker` below.
 
 ### 3. `.env.docker` additions
 
-Add to the VM's `.env.docker` (see `.env.docker.example` for the full set): `AUTH_SECRET` (generate with `openssl rand -base64 32`), `AUTH_URL=https://refresh.markrwatts.com`, `AUTH_TRUSTED_ORIGINS=https://refresh.markrwatts.com`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` (from step 1), `RESEND_API_KEY` (from step 2).
+Add to the VM's `.env.docker` (see `.env.docker.example` for the full set): `AUTH_SECRET` (generate with `openssl rand -base64 32`), `AUTH_URL=https://refresh.example.com`, `AUTH_TRUSTED_ORIGINS=https://refresh.example.com`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` (from step 1), `RESEND_API_KEY` (from step 2).
 
 ### 4. Schema migration + backfill
 
@@ -124,13 +126,13 @@ docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.pr
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml exec app npx prisma migrate deploy
 ```
 
-Then, in a real browser, sign in once as each real household member (Google or magic-link) at `https://refresh.markrwatts.com/signin` — this just needs a `User` row to exist for each, no household yet. Both land on `/onboarding`, which is expected; ignore it for now.
+Then, in a real browser, sign in once as each real household member (Google or magic-link) at `https://refresh.example.com/signin` — this just needs a `User` row to exist for each, no household yet. Both land on `/onboarding`, which is expected; ignore it for now.
 
 ```bash
-# 2. Backfill: creates the "<household>" household, attaches both members, migrates
+# 2. Backfill: creates the household, attaches both members, migrates
 #    existing favourite/hidden/this-week data into it
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml exec app \
-  npx tsx scripts/backfill-household.ts "<household>" markrwatts@gmail.com partner@example.com
+  npx tsx scripts/backfill-household.ts "<household name>" owner@example.com partner@example.com
 
 # 3. Apply the final migration (MealPlan.householdId required; drops the old Recipe columns)
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml exec app npx prisma migrate deploy
@@ -138,17 +140,17 @@ docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.pr
 
 ### 5. Verify
 
-Sign in as both household members again — same recipe catalog and count as before, existing favourites/hidden recipes/this-week plan all present for both (not duplicated, not lost). `/account` shows "<household>" with both as members. A third sign-in (anyone else) lands on `/onboarding` and can start its own household against the same shared catalog, seeing none of the household's favourites/hidden/plan state.
+Sign in as both household members again — same recipe catalog and count as before, existing favourites/hidden recipes/this-week plan all present for both (not duplicated, not lost). `/account` shows the household with both as members. A third sign-in (anyone else) lands on `/onboarding` and can start its own household against the same shared catalog, seeing none of the first household's favourites/hidden/plan state.
 
 ## Going public (Cloudflare Tunnel + Access + Pi-hole split DNS)
 
-Runbook for opening `https://refresh.markrwatts.com` to invited friends/family on the internet. No port-forwarding, and the home IP never appears in DNS. **Applied 2026-08-25** — see [As applied](#as-applied-2026-08-25) below for the deltas between this plan and what the dashboard actually looks like now.
+Runbook for opening `https://refresh.example.com` to invited friends/family on the internet. No port-forwarding, and the home IP never appears in DNS. **Applied 2026-08-25** — see [As applied](#as-applied-2026-08-25) below for the deltas between this plan and what the dashboard actually looks like now.
 
-The shape: externally, a **Cloudflare Tunnel** carries traffic from Cloudflare's edge to the VM over an outbound-only connection, with **Cloudflare Access** (an email allowlist, free tier covers 50 users) gating it before a request ever reaches the VM. Internally, the **Pi-hole** answers `refresh.markrwatts.com` with the VM's LAN IP, so LAN clients keep hitting the shared Caddy directly — same URL, same real Let's Encrypt certificate on both paths (Caddy's cert comes via DNS-01/acme-dns, which doesn't care where the public record points, so the LAN path stays warning-free). App-level auth (Better Auth) is unchanged and applies on both paths; Access is an extra outer gate on the external path only.
+The shape: externally, a **Cloudflare Tunnel** carries traffic from Cloudflare's edge to the VM over an outbound-only connection, with **Cloudflare Access** (an email allowlist, free tier covers 50 users) gating it before a request ever reaches the VM. Internally, the **Pi-hole** answers `refresh.example.com` with the VM's LAN IP, so LAN clients keep hitting the shared Caddy directly — same URL, same real Let's Encrypt certificate on both paths (Caddy's cert comes via DNS-01/acme-dns, which doesn't care where the public record points, so the LAN path stays warning-free). App-level auth (Better Auth) is unchanged and applies on both paths; Access is an extra outer gate on the external path only.
 
-### Why not reuse jinglejotter.com's tunnel
+### Why a separate tunnel (not another app's)
 
-One cloudflared tunnel *can* route any number of hostnames across every zone in the same Cloudflare account (markrwatts.com and jinglejotter.com both qualify), so sharing is technically possible. It's still the wrong move: that tunnel belongs to the jinglejotter.com **staging** stack (`~/another-app-staging` on this VM, `docker-compose.staging.yml`), which (a) sits on that stack's own compose network, (b) has already been torn down and rebuilt with `down -v` at least once, and (c) is planned to be re-pointed at a a VPS provider VPS — at which point anything piggybacking on it loses its ingress. Tunnels are free and unlimited, so separation costs nothing.
+One cloudflared tunnel *can* route any number of hostnames across every zone in the same Cloudflare account, so sharing an existing tunnel is technically possible. It's still the wrong move when that tunnel belongs to another app's own compose stack: it sits on that stack's network, shares that stack's lifecycle (teardowns, rebuilds, possible re-homing to other hardware), and anything piggybacking on it loses its ingress the day that stack moves. Tunnels are free and unlimited, so separation costs nothing.
 
 Instead, follow the house pattern: a tunnel that fronts apps on this VM is shared infrastructure, so **it lives in `~/edge`** alongside Caddy, owned by no single app's repo. A future app going public just adds a public hostname to *this* tunnel.
 
@@ -171,9 +173,9 @@ Then `cd ~/edge && docker compose up -d` and confirm the tunnel shows **Healthy*
 
 ### 2. Route the hostname through it
 
-In the tunnel's **Public hostnames** tab: add `refresh.markrwatts.com` → service `http://refresh:3000`. The connector is on the `edge` network, so it reaches the app by the same alias Caddy does.
+In the tunnel's **Public hostnames** tab: add `refresh.example.com` → service `http://refresh:3000`. The connector is on the `edge` network, so it reaches the app by the same alias Caddy does.
 
-Two DNS notes (markrwatts.com zone, Cloudflare):
+Two DNS notes (apex zone, Cloudflare):
 
 - The dashboard creates a **proxied CNAME** for `refresh` pointing at the tunnel — the existing grey-cloud `A refresh → <VM LAN IP>` record must be deleted first (the dashboard will refuse or prompt otherwise).
 - **Keep `CNAME _acme-challenge.refresh`** (the acme-dns delegation). Caddy's LAN-path certificate renewal depends on it.
@@ -184,8 +186,8 @@ Why point the tunnel at `refresh:3000` rather than at Caddy: Caddy's only job in
 
 Zero Trust → Access → Applications → Add an application → Self-hosted:
 
-- **Domain**: `refresh.markrwatts.com` (the whole site — no bypass paths needed; see interplay notes below).
-- **Policy**: Allow, Include → Emails → the invited list. Make a **reFresh-specific policy** — don't reuse the `another-app` reusable policy, which is a two-person dev gate; this list is friends/family and the two will evolve independently.
+- **Domain**: `refresh.example.com` (the whole site — no bypass paths needed; see interplay notes below).
+- **Policy**: Allow, Include → Emails → the invited list. Make a **reFresh-specific policy** — don't reuse another app's reusable policy; the lists will evolve independently.
 - **Login methods**: One-time PIN covers everyone with an email address. Optionally also add Google as an Access identity provider so Google-account users get one-click instead of a PIN.
 - **Session duration**: something long (e.g. 1 month) — the app's own Better Auth session is 30 days; matching keeps the outer gate from re-prompting more often than the app does.
 
@@ -210,25 +212,25 @@ One deliberate difference from jinglejotter.com's version: **empty/unset = gate 
 
 What actually happened when this ran, where it differed from the plan above:
 
-- **Tunnel**: `home-edge`, created via Zero Trust → Networks → Tunnels & Mesh. Public hostnames now live on the tunnel's **"Published application routes"** tab (the dashboard renamed them); the route is `refresh.markrwatts.com` → `http://refresh:3000`, and the tunnel's catch-all rule (any other hostname pointed at it) returns `http_status:404`.
+- **Tunnel**: `home-edge`, created via Zero Trust → Networks → Tunnels & Mesh. Public hostnames now live on the tunnel's **"Published application routes"** tab (the dashboard renamed them); the route is `refresh.example.com` → `http://refresh:3000`, and the tunnel's catch-all rule (any other hostname pointed at it) returns `http_status:404`.
 - **Token handling**: the connector token never passed through the assistant/chat — Mark copied it from the dashboard and piped it from the clipboard straight into `~/edge/.env` over SSH (`pbpaste | grep -oE 'eyJ...' | ssh ... 'cat >> ~/edge/.env'`).
-- **Access app**: application `refresh` (domain `refresh.markrwatts.com`), policy named `refresh.markrwatts.com` allowing `markrwatts@gmail.com` + `partner@example.com`, session duration 1 month. "Accept all available identity providers" is on, which on this account resolves to **one-time PIN only** — no other IdP is configured.
+- **Access app**: application `refresh` (domain `refresh.example.com`), policy named `refresh.example.com` allowing the invited emails (see Confluence for the live list), session duration 1 month. "Accept all available identity providers" is on, which on this account resolves to **one-time PIN only** — no other IdP is configured.
 - **DNS**: the old grey-cloud A record had a **1-day TTL**, so LAN clients kept resolving to the VM (straight to Caddy) until their caches expired — an accidental grace period, no outage during the flip. Once caches expire, everything hairpins through Cloudflare, Access included.
 - **`ALLOWED_EMAILS` needed a compose fix**: the base `docker-compose.yml` didn't forward the var into the `app` container (`--env-file` only does compose-file substitution). Fixed by adding it to the `environment:` map.
 - **Pi-hole split DNS applied later the same day** (section 4 below). One gotcha: after adding the Local DNS record, the Pi-hole kept serving its previously-cached Cloudflare edge IPs *alongside* the local record (stale entries, visible as TTL 0) until its DNS cache was flushed (Settings → System → Flush DNS cache, or `pihole restartdns`). Post-flush it answers with only the VM's LAN IP. Also worth knowing: browsers hold their own DNS cache and keep-alive sockets, so a DNS-side change isn't visible in an already-running browser until it's fully restarted.
-- **Verified**: `curl --resolve refresh.markrwatts.com:443:<cf-edge-ip>` returns the 302 to `example-team.cloudflareaccess.com` — Access intercepts before the origin. App-level gate verified live in the container (2 allowlist entries loaded).
-- **Branded-email assets bypass (added 2026-08-25)**: transactional emails (magic link, and household invites — added the same day via the org plugin's `sendInvitationEmail`) reference `public/brand/email-icon.png` / `email-wordmark.png` in their header (`src/lib/email.ts`). Mail clients and Gmail's image proxy fetch these unauthenticated, so a second Access application (`refresh`, destination `refresh.markrwatts.com/brand`) carries a **Bypass**-everyone policy (`brand-assets-public`) — Access evaluates Bypass policies before Allow, so just that path is public while everything else stays gated. Only ever put non-sensitive, world-readable assets under `public/brand/`.
+- **Verified**: `curl --resolve refresh.example.com:443:<cf-edge-ip>` returns the 302 to `<team>.cloudflareaccess.com` — Access intercepts before the origin. App-level gate verified live in the container (correct allowlist entry count loaded).
+- **Branded-email assets bypass (added 2026-08-25)**: transactional emails (magic link, and household invites — added the same day via the org plugin's `sendInvitationEmail`) reference `public/brand/email-icon.png` / `email-wordmark.png` in their header (`src/lib/email.ts`). Mail clients and Gmail's image proxy fetch these unauthenticated, so a second Access application (`refresh`, destination `refresh.example.com/brand`) carries a **Bypass**-everyone policy (`brand-assets-public`) — Access evaluates Bypass policies before Allow, so just that path is public while everything else stays gated. Only ever put non-sensitive, world-readable assets under `public/brand/`.
 
 ### 4. Pi-hole split DNS (LAN path)
 
-Pi-hole admin → Local DNS → DNS Records: `refresh.markrwatts.com` → `<VM LAN IP>`.
+Pi-hole admin → Local DNS → DNS Records: `refresh.example.com` → `<VM LAN IP>`.
 
-LAN clients then resolve straight to the VM and hit Caddy as they always have — no tunnel hairpin, no Access prompt at home, real LE certificate. Verify with `dig refresh.markrwatts.com @<pihole-ip>` (expect the LAN IP) vs `dig refresh.markrwatts.com @1.1.1.1` (expect Cloudflare edge IPs).
+LAN clients then resolve straight to the VM and hit Caddy as they always have — no tunnel hairpin, no Access prompt at home, real LE certificate. Verify with `dig refresh.example.com @<pihole-ip>` (expect the LAN IP) vs `dig refresh.example.com @1.1.1.1` (expect Cloudflare edge IPs).
 
 Known behaviours, both fine:
 
 - Devices with hardcoded DoH (Android/Chrome "Private DNS", iCloud Private Relay) ignore the Pi-hole and take the Cloudflare path even at home — just a hairpin, everything still works.
-- **Chrome vs split DNS (cost real debugging time, 2026-08-25)**: Chrome caches per-hostname transport state learned via the Cloudflare path — alt-svc "this host speaks HTTP/3", TLS session state, and extra DNS lookups (HTTPS/type-65 records carrying Cloudflare's ECH keys). Back on the LAN path this produced `ERR_QUIC_PROTOCOL_ERROR` (Chrome tried QUIC at Caddy, but `~/edge` only published TCP 443 — **fixed**: `443:443/udp` is now published and Caddy's HTTP/3 listener serves it; no ufw change needed since Docker's port publishing bypasses ufw) and then `ERR_SSL_PROTOCOL_ERROR` (stale CF-era TLS/ECH state against Caddy). Two-part cure: give the Pi-hole full authority over the name — `misc.dnsmasq_lines` → `local=/refresh.markrwatts.com/` — so non-A query types get a clean NODATA instead of inconsistent/forwarded answers, and clear Chrome's cached data once (its poisoned caches also age out on their own). Safari/curl are unaffected throughout.
+- **Chrome vs split DNS (cost real debugging time, 2026-08-25)**: Chrome caches per-hostname transport state learned via the Cloudflare path — alt-svc "this host speaks HTTP/3", TLS session state, and extra DNS lookups (HTTPS/type-65 records carrying Cloudflare's ECH keys). Back on the LAN path this produced `ERR_QUIC_PROTOCOL_ERROR` (Chrome tried QUIC at Caddy, but `~/edge` only published TCP 443 — **fixed**: `443:443/udp` is now published and Caddy's HTTP/3 listener serves it; no ufw change needed since Docker's port publishing bypasses ufw) and then `ERR_SSL_PROTOCOL_ERROR` (stale CF-era TLS/ECH state against Caddy). Two-part cure: give the Pi-hole full authority over the name — `misc.dnsmasq_lines` → `local=/refresh.example.com/` — so non-A query types get a clean NODATA instead of inconsistent/forwarded answers, and clear Chrome's cached data once (its poisoned caches also age out on their own). Safari/curl are unaffected throughout.
 - Guests on the home Wi-Fi bypass Access entirely (they resolve via Pi-hole). They still face the app's own sign-in, so nothing is open — but the email allowlist only guards the *external* path.
 
 ### 5. Firewall / router
@@ -237,7 +239,7 @@ Nothing changes. The tunnel is outbound-only from `cloudflared`; no ports are fo
 
 ### 6. Verify
 
-- From mobile data (off Wi-Fi): `https://refresh.markrwatts.com` → Access prompt → OTP/Google → app sign-in works end-to-end (Google and magic link both).
+- From mobile data (off Wi-Fi): `https://refresh.example.com` → Access prompt → OTP/Google → app sign-in works end-to-end (Google and magic link both).
 - An email *not* on the Access policy is refused before reaching the app.
 - From the LAN (which bypasses Access): a sign-in attempt with an email not in `ALLOWED_EMAILS` fails with `?error=failed_to_create_session`, and a magic-link request for it sends no email (check Resend's log shows nothing).
 - On the LAN: cert is the Let's Encrypt one (not Cloudflare's), no Access prompt, app works as before.
@@ -247,4 +249,4 @@ Nothing changes. The tunnel is outbound-only from `cloudflared`; no ports are fo
 
 - Cloudflare's proxy caps request bodies at **100 MB** (free plan) — relevant to PDF imports on the external path only; the LAN path is uncapped.
 - Removing someone later is a three-place job: the Access policy **plus** revoking their active Access session (Zero Trust → My Team → Users — the policy edit alone doesn't kill an existing session cookie), **plus** `ALLOWED_EMAILS` in `.env.docker` (+ restart). The app-level gate fires on session *creation*, so their existing 30-day Better Auth session also outlives the edit — delete their `Session` rows via `psql` if removal needs to be immediate.
-- `AUTH_URL` / `AUTH_TRUSTED_ORIGINS` already point at `https://refresh.markrwatts.com` — no app env changes needed for any of this.
+- `AUTH_URL` / `AUTH_TRUSTED_ORIGINS` already point at `https://refresh.example.com` — no app env changes needed for any of this.
