@@ -21,9 +21,9 @@ function safeCallbackURL(raw: string | undefined): string {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string; callbackURL?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string; deleted?: string; callbackURL?: string }>;
 }) {
-  const { error, sent, callbackURL: callbackURLRaw } = await searchParams;
+  const { error, sent, deleted, callbackURL: callbackURLRaw } = await searchParams;
   const callbackURL = safeCallbackURL(callbackURLRaw);
 
   // Real (database-validated) session check — a genuinely signed-in user
@@ -45,7 +45,11 @@ export default async function SignInPage({
           priority
         />
 
-        {sent ? (
+        {deleted ? (
+          <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Your account has been deleted.
+          </p>
+        ) : sent ? (
           <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             Check your email for a sign-in link — it expires in 10 minutes.
           </p>

@@ -3,6 +3,7 @@ import { CircleUserRound, Home, Mail, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireMemberOrRedirect } from "@/lib/require-member";
 import SignOutButton from "@/components/SignOutButton";
+import DeleteAccountButton from "@/components/DeleteAccountButton";
 import {
   InviteForm,
   PendingInviteRow,
@@ -145,6 +146,16 @@ export default async function AccountPage() {
       )}
 
       <SignOutButton />
+
+      <div className="flex justify-center border-t border-zinc-200 pt-6">
+        <DeleteAccountButton
+          householdName={household.name}
+          soleOwner={
+            isOwner && !household.members.some((m) => m.userId !== userId && m.role === "owner")
+          }
+          otherMemberCount={household.members.filter((m) => m.userId !== userId).length}
+        />
+      </div>
     </div>
   );
 }
