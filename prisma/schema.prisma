@@ -40,6 +40,12 @@ model Account {
   userId                String
   accountId             String
   providerId            String
+  // The account's issuing authority (e.g. "https://accounts.google.com") —
+  // Better Auth's own core Account schema requires this on every lookup,
+  // separate from providerId. Missed on the first pass through this
+  // schema; the real Google OAuth callback errors without it
+  // ("Unknown argument `issuer`").
+  issuer                String
   accessToken           String?
   refreshToken          String?
   idToken               String?

@@ -13,20 +13,25 @@ export default function SubmitButton({
   label,
   pendingLabel,
   className,
+  icon,
 }: {
   label: string;
   pendingLabel: string;
   className: string;
+  /** Optional leading icon (e.g. a brand mark) shown before the label — hidden while pending, replaced by the spinner. */
+  icon?: React.ReactNode;
 }) {
   const { pending } = useFormStatus();
 
   return (
     <button type="submit" disabled={pending} className={className}>
-      {pending && (
+      {pending ? (
         <span
           aria-hidden
           className="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/40 border-t-current align-[-2px]"
         />
+      ) : (
+        icon
       )}
       {pending ? pendingLabel : label}
     </button>
