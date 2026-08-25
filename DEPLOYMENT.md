@@ -228,6 +228,7 @@ LAN clients then resolve straight to the VM and hit Caddy as they always have �
 Known behaviours, both fine:
 
 - Devices with hardcoded DoH (Android/Chrome "Private DNS", iCloud Private Relay) ignore the Pi-hole and take the Cloudflare path even at home — just a hairpin, everything still works.
+- **Chrome vs split DNS (cost real debugging time, 2026-08-25)**: Chrome caches per-hostname transport state learned via the Cloudflare path — alt-svc "this host speaks HTTP/3", TLS session state, and extra DNS lookups (HTTPS/type-65 records carrying Cloudflare's ECH keys). Back on the LAN path this produced `ERR_QUIC_PROTOCOL_ERROR` (Chrome tried QUIC at Caddy, but `~/edge` only published TCP 443 — **fixed**: `443:443/udp` is now published and Caddy's HTTP/3 listener serves it; no ufw change needed since Docker's port publishing bypasses ufw) and then `ERR_SSL_PROTOCOL_ERROR` (stale CF-era TLS/ECH state against Caddy). Two-part cure: give the Pi-hole full authority over the name — `misc.dnsmasq_lines` → `local=/refresh.markrwatts.com/` — so non-A query types get a clean NODATA instead of inconsistent/forwarded answers, and clear Chrome's cached data once (its poisoned caches also age out on their own). Safari/curl are unaffected throughout.
 - Guests on the home Wi-Fi bypass Access entirely (they resolve via Pi-hole). They still face the app's own sign-in, so nothing is open — but the email allowlist only guards the *external* path.
 
 ### 5. Firewall / router
