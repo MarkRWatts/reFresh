@@ -5,13 +5,24 @@ import type { ActionState } from "@/app/actions/household";
 
 export default function CreateHouseholdForm({
   action,
+  defaultName = "",
 }: {
-  action: () => Promise<ActionState>;
+  action: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
+  defaultName?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      <input
+        type="text"
+        name="name"
+        required
+        maxLength={60}
+        defaultValue={defaultName}
+        placeholder="e.g. The Watts household"
+        className="w-full rounded-full border border-zinc-300 bg-zinc-50 px-4 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-600 focus:outline-none"
+      />
       <button
         type="submit"
         disabled={pending}

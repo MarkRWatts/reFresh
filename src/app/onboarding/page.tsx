@@ -6,6 +6,17 @@ import { prisma } from "@/lib/db";
 import { createHousehold, goToInvite } from "@/app/actions/household";
 import CreateHouseholdForm from "@/components/CreateHouseholdForm";
 
+/** Household.name is required by the organization plugin. Derives a
+ *  starting suggestion from whatever the user's sign-in already gave us —
+ *  prefilled into the create-household form, not silently used outright,
+ *  so a household never ends up stuck with an auto-picked name and no way
+ *  to change it (see RenameHouseholdForm on /account for that escape
+ *  hatch too). */
+function defaultHouseholdName(name: string | null | undefined, email: string | null | undefined): string {
+  const base = (name ?? email ?? "").trim().split(/[\s@]/)[0];
+  return `${base || "New"}'s Household`;
+}
+
 // First-run screen for a signed-in user with no household: create one, or
 // jump to an invite link they were sent. Reached via requireMemberOrRedirect()
 // from every protected page, so a user with a household is never routed
@@ -37,7 +48,10 @@ export default async function OnboardingPage() {
             set up. Everyone shares the same recipe catalog but keeps their own favourites,
             hidden recipes, and this week&apos;s plan.
           </p>
-          <CreateHouseholdForm action={createHousehold} />
+          <CreateHouseholdForm
+            action={createHousehold}
+            defaultName={defaultHouseholdName(session.user.name, session.user.email)}
+          />
         </div>
 
         <div className="flex items-center gap-3 text-xs text-zinc-400">

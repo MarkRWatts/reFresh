@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireMemberOrRedirect } from "@/lib/require-member";
 import SignOutButton from "@/components/SignOutButton";
 import DeleteAccountButton from "@/components/DeleteAccountButton";
+import RenameHouseholdForm from "@/components/RenameHouseholdForm";
 import {
   InviteForm,
   PendingInviteRow,
@@ -75,7 +76,11 @@ export default async function AccountPage() {
       <section className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Home size={20} className="text-emerald-600" />
-          <h2 className="text-xl font-semibold text-zinc-900">{household.name}</h2>
+          {isOwner ? (
+            <RenameHouseholdForm name={household.name} />
+          ) : (
+            <h2 className="text-xl font-semibold text-zinc-900">{household.name}</h2>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Users size={18} className="text-emerald-600" />

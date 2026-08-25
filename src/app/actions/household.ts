@@ -17,27 +17,27 @@ import { isTooLong } from "@/lib/validation";
 
 export type ActionState = { error?: string } | null;
 
-/** Household.name is required by the organization plugin but isn't a
- *  meaningful user choice — it only ever shows up as a heading on /account,
- *  so there's nothing worth prompting for. Derives something readable from
- *  whatever the user's sign-in already gave us. */
-function defaultHouseholdName(name: string | null | undefined, email: string | null | undefined): string {
-  const base = (name ?? email ?? "").trim().split(/[\s@]/)[0];
-  return `${base || "New"}'s Household`;
-}
-
 /** First-run: create a brand-new household for the signed-in user, who
  *  becomes its owner. Delegates to Better Auth's create-organization
  *  endpoint, which enforces the same single-household-per-user check as
  *  invite acceptance (auth.ts's organizationLimit) and assigns
  *  creatorRole ("owner"). */
-export async function createHousehold(): Promise<ActionState> {
+export async function createHousehold(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) redirect("/signin?callbackURL=/onboarding");
 
-  const name = defaultHouseholdName(session.user.name, session.user.email);
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Give your household a name." };
+  if (isTooLong(name, 60)) return { error: "That name is a bit long." };
 
   try {
+    // Slug suffixed with a timestamp rather than bare slugify(name) — user-
+    // chosen names collide far more easily than the old auto-derived ones
+    // (two households both landing on "Smith Family" isn't a stretch), and
+    // Household.slug is unique.
     await auth.api.createOrganization({
       headers: await headers(),
       body: { name, slug: slugify(`${name}-${Date.now()}`) },
@@ -54,6 +54,35 @@ export async function createHousehold(): Promise<ActionState> {
   // already does this before its own redirect.
   revalidatePath("/", "layout");
   redirect("/");
+}
+
+/** Rename the household — owner-only. Delegates to Better Auth's own
+ *  update-organization endpoint, which checks the caller holds
+ *  organization:update permission (owner-only by default — see auth.ts;
+ *  the "member" role has no organization permissions at all) and scopes
+ *  the update to the given organizationId itself, so there's no separate
+ *  cross-household check needed here. */
+export async function updateHouseholdName(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const { householdId } = await requireMember();
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Give your household a name." };
+  if (isTooLong(name, 60)) return { error: "That name is a bit long." };
+
+  try {
+    await auth.api.updateOrganization({
+      headers: await headers(),
+      body: { organizationId: householdId, data: { name } },
+    });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't rename your household." };
+  }
+
+  revalidatePath("/account");
+  return null;
 }
 
 /** First-run: jump straight to an invite's landing page from a pasted
