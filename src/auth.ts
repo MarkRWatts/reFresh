@@ -5,7 +5,30 @@ import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import { renderBrandedEmail, sendEmail } from "@/lib/email";
 
+// Comma-separated, case-insensitive email allowlist — the app-level half of
+// the belt-and-braces gate described in DEPLOYMENT.md's "Going public"
+// section (Cloudflare Access is the other half, on the external path only).
+// Ported from jinglejotter.com's app/auth.ts with one deliberate difference:
+// there an empty list means nobody signs in; here empty/unset means the gate
+// is OFF, so local dev and a LAN-only deployment work without the var and
+// enforcement starts only when .env.docker sets it.
+function isAllowedEmail(email: string | null | undefined): boolean {
+  const allowed = (process.env.ALLOWED_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowed.length === 0) return true;
+  if (!email) return false;
+  return allowed.includes(email.toLowerCase());
+}
+
+// Silently no-ops for disallowed emails: the allowlist is authoritative at
+// session-creation time anyway (see databaseHooks below), but not sending
+// the email at all means a stranger who types some other address into the
+// sign-in form never learns this app exists or that they were rejected —
+// and never consumes Resend quota.
 async function sendMagicLinkEmail(email: string, url: string) {
+  if (!isAllowedEmail(email)) return;
   const { html, text } = renderBrandedEmail({
     heading: "Your sign-in link",
     bodyHtml: "<p>Click below to get back into re:Fresh. This link expires in 10 minutes.</p>",
@@ -36,14 +59,33 @@ export const auth = betterAuth({
       clientSecret: process.env.AUTH_GOOGLE_SECRET ?? "",
     },
   },
-  // Sign-in is fully open (no email allowlist, unlike jinglejotter.com's
-  // two-person gate) — household membership is the real gate on doing
-  // anything (see require-member.ts), matching the goal of letting
-  // arbitrary future households share the recipe catalog. No dev-seeded
-  // User rows exist to link either, so accountLinking stays at its default
-  // rather than trusting Google to auto-link (see jinglejotter.com's own
-  // roadmap note on why that trust is narrower than it looks once sign-in
-  // is open to more than a two-address allowlist).
+  // No dev-seeded User rows exist to link, so accountLinking stays at its
+  // default rather than trusting Google to auto-link (see jinglejotter.com's
+  // own roadmap note on why that trust is narrower than it looks once
+  // sign-in is open beyond a tiny allowlist).
+  databaseHooks: {
+    // Gate every session creation (i.e. every successful sign-in), not just
+    // first-time account creation — fires via the shared internalAdapter
+    // createWithHooks path regardless of auth method (Google, magic link,
+    // whatever comes next), so a disallowed email can never get a session;
+    // at worst it leaves an unusable orphan User row. No-op while
+    // ALLOWED_EMAILS is unset — see isAllowedEmail above. Household
+    // membership (require-member.ts) remains the gate on reaching any data.
+    session: {
+      create: {
+        async before(session) {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { email: true },
+          });
+          if (!isAllowedEmail(user?.email)) {
+            return false;
+          }
+          return true;
+        },
+      },
+    },
+  },
   plugins: [
     // Multi-tenancy scaffolding — renamed to Household/Member/Invitation to
     // match this app's own domain language; underlying plugin behaviour
