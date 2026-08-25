@@ -1,4 +1,4 @@
-import { Carrot, FileText, Sparkles } from "lucide-react";
+import { Carrot, Sparkles } from "lucide-react";
 import Link from "next/link";
 import FilterBar from "@/components/FilterBar";
 import Pagination from "@/components/Pagination";
@@ -39,13 +39,6 @@ export default async function Home({
             {total.toLocaleString()} recipe{total === 1 ? "" : "s"}
           </p>
           <div className="flex gap-2">
-            <Link
-              href="/recipes/import"
-              className="flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 hover:border-zinc-400"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Import from PDF
-            </Link>
             <Link
               href={`/suggest${buildFilterQueryString(filters)}`}
               className="flex items-center gap-1.5 rounded-full border border-emerald-600 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"

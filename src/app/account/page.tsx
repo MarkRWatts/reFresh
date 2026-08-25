@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { CircleUserRound, Home, Mail, Users } from "lucide-react";
+import Link from "next/link";
+import { CircleUserRound, FileText, Home, Mail, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireMemberOrRedirect } from "@/lib/require-member";
 import SignOutButton from "@/components/SignOutButton";
@@ -149,6 +150,20 @@ export default async function AccountPage() {
           )}
         </section>
       )}
+
+      <section className="flex flex-col gap-4 border-t border-zinc-200 pt-6">
+        <div className="flex items-center gap-2">
+          <FileText size={20} className="text-emerald-600" />
+          <h2 className="text-xl font-semibold text-zinc-900">Recipes</h2>
+        </div>
+        <Link
+          href="/recipes/import"
+          className="flex w-fit items-center gap-1.5 rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400"
+        >
+          <FileText className="h-4 w-4" />
+          Import a recipe
+        </Link>
+      </section>
 
       <SignOutButton />
 

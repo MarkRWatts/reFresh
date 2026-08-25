@@ -7,7 +7,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import Logo from "@/components/Logo";
 import PlanDrawerRoot from "@/components/PlanDrawerRoot";
-import SignOutButton from "@/components/SignOutButton";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -70,33 +69,33 @@ export default async function RootLayout({
             <div className="ml-auto flex items-center gap-3">
               {member && <PlanDrawerRoot householdId={member.householdId} />}
               {session?.user ? (
-                <>
-                  <Link
-                    href="/account"
-                    className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-zinc-100"
-                  >
-                    {session.user.image ? (
-                      <Image
-                        src={session.user.image}
-                        alt=""
-                        width={28}
-                        height={28}
-                        className="h-7 w-7 shrink-0 rounded-full object-cover"
-                      />
-                    ) : (
-                      <span
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
-                        aria-hidden="true"
-                      >
-                        {initial(session.user.name, session.user.email)}
-                      </span>
-                    )}
-                    <span className="max-w-[8rem] truncate text-sm font-medium text-zinc-700">
-                      {session.user.name ?? session.user.email}
+                <Link
+                  href="/account"
+                  className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-zinc-100"
+                >
+                  {session.user.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt=""
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
+                      aria-hidden="true"
+                    >
+                      {initial(session.user.name, session.user.email)}
                     </span>
-                  </Link>
-                  <SignOutButton />
-                </>
+                  )}
+                  {/* Name text drops on mobile — just the avatar there, same
+                      as the "This week"/sign-out squeeze this was added to
+                      fix. Sign out itself lives on /account now, not here. */}
+                  <span className="hidden max-w-[8rem] truncate text-sm font-medium text-zinc-700 sm:inline">
+                    {session.user.name ?? session.user.email}
+                  </span>
+                </Link>
               ) : (
                 <Link
                   href="/signin"
