@@ -102,6 +102,38 @@ export function renderBrandedEmail({
   return { html, text };
 }
 
+/** Generic "come use the app" invite — deliberately names no household and
+ *  links to plain sign-in, not an invite token: the recipient sets up their
+ *  own household via /onboarding and never sees the sender's. The household
+ *  invite email (auth.ts's sendInvitationEmail) is the other, distinct
+ *  action. Reaching sign-in still requires the out-of-app gates (Cloudflare
+ *  Access + ALLOWED_EMAILS + Google test users) to already list them. */
+export async function sendAppInviteEmail({
+  to,
+  inviterName,
+}: {
+  to: string;
+  inviterName: string;
+}) {
+  const baseUrl = (process.env.AUTH_URL ?? "https://refresh.markrwatts.com").replace(/\/$/, "");
+  const { html, text } = renderBrandedEmail({
+    heading: `${inviterName} invited you to try re:Fresh`,
+    bodyHtml:
+      "<p>re:Fresh is a shared recipe catalog and weekly meal planner. Sign in with Google or an emailed link, set up your own household, and start planning your week.</p>",
+    bodyText:
+      "re:Fresh is a shared recipe catalog and weekly meal planner. Sign in with Google or an emailed link, set up your own household, and start planning your week.",
+    ctaLabel: "Get started",
+    ctaUrl: `${baseUrl}/signin`,
+    footerText: `This invite was sent from re:Fresh by ${inviterName}. If you weren't expecting it, you can safely ignore this email.`,
+  });
+  await sendEmail({
+    to,
+    subject: `${inviterName} invited you to try re:Fresh`,
+    html,
+    text,
+  });
+}
+
 export async function sendEmail({
   to,
   subject,

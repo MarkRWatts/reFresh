@@ -131,8 +131,9 @@ export default async function AccountPage() {
             <h2 className="text-xl font-semibold text-zinc-900">Invite someone</h2>
           </div>
           <p className="text-sm text-zinc-500">
-            Send them the link and they can join with any sign-in method — it doesn&apos;t need to
-            match the email you enter here.
+            They&apos;ll be emailed a link to join this household — any sign-in method works, it
+            doesn&apos;t need to match the email you enter here. Tick the box to invite them to
+            re:Fresh without joining your household.
           </p>
           <InviteForm />
 

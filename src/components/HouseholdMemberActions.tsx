@@ -87,9 +87,10 @@ function formatExpiry(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-/** Copy-the-link + cancel for one pending invite. The link itself
- *  (`/invite/<id>`) is never emailed by the app — the owner shares it
- *  themselves, so `Invitation.email` stays a hint, not a delivery target. */
+/** Copy-the-link + cancel for one pending household invite. The link
+ *  (`/invite/<id>`) is also emailed to the invitee (auth.ts's
+ *  sendInvitationEmail), but `Invitation.email` remains a hint, not an
+ *  authorization check — redemption is token-only (see acceptInvitation). */
 export function PendingInviteRow({
   id,
   email,
@@ -143,23 +144,45 @@ export function PendingInviteRow({
 
 export function InviteForm() {
   const [state, formAction, pending] = useActionState(createInvitation, null);
+  const [appOnly, setAppOnly] = useState(false);
   return (
-    <form action={formAction} className="flex gap-2">
-      <input
-        type="email"
-        name="email"
-        required
-        placeholder="them@example.com"
-        className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-600 focus:outline-none"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="shrink-0 rounded-full border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-      >
-        {pending ? "Sending…" : "Invite"}
-      </button>
-      {state?.error && <span className="self-center text-xs text-red-600">{state.error}</span>}
+    <form action={formAction} className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <input
+          type="email"
+          name="email"
+          required
+          placeholder="them@example.com"
+          className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-600 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={pending}
+          className="shrink-0 rounded-full border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {pending ? "Sending…" : "Invite"}
+        </button>
+      </div>
+      <label className="flex items-start gap-2 text-sm text-zinc-600">
+        <input
+          type="checkbox"
+          name="appOnly"
+          checked={appOnly}
+          onChange={(e) => setAppOnly(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-emerald-600"
+        />
+        <span>
+          Invite to re:Fresh only — they&apos;ll set up their own household and won&apos;t see
+          yours.
+        </span>
+      </label>
+      {state?.sent && (
+        <span className="flex items-center gap-1.5 text-xs text-emerald-700">
+          <Check className="h-3.5 w-3.5" />
+          Invite sent to {state.sent}
+        </span>
+      )}
+      {state?.error && <span className="text-xs text-red-600">{state.error}</span>}
     </form>
   );
 }

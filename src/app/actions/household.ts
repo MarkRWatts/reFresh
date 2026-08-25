@@ -14,8 +14,9 @@ import { prisma } from "@/lib/db";
 import { requireMember } from "@/lib/require-member";
 import { slugify } from "@/lib/recipes/slug";
 import { isTooLong } from "@/lib/validation";
+import { sendAppInviteEmail } from "@/lib/email";
 
-export type ActionState = { error?: string } | null;
+export type ActionState = { error?: string; sent?: string } | null;
 
 /** First-run: create a brand-new household for the signed-in user, who
  *  becomes its owner. Delegates to Better Auth's create-organization
@@ -99,20 +100,44 @@ export async function goToInvite(formData: FormData): Promise<void> {
   redirect(`/invite/${encodeURIComponent(cleanToken)}`);
 }
 
-/** Invite someone to the household by email. Delegates to Better Auth's own
- *  create-invitation endpoint, which checks the caller actually holds
- *  invitation:create permission (owner-only by default — see auth.ts) and
- *  enforces the household's membership limit. The email is a hint shown in
- *  the invite UI, not an authorization check — see acceptInvitation. */
+/** Invite someone by email — two similar but distinct actions behind one
+ *  form, chosen by the form's "appOnly" tickbox:
+ *
+ *  - Household invite (default): delegates to Better Auth's own
+ *    create-invitation endpoint, which checks the caller actually holds
+ *    invitation:create permission (owner-only by default — see auth.ts) and
+ *    enforces the household's membership limit. The email is a hint shown in
+ *    the invite UI, not an authorization check — see acceptInvitation.
+ *    auth.ts's sendInvitationEmail emails them a join link.
+ *  - App-only invite ("appOnly" set): just sends the branded
+ *    come-try-re:Fresh email (lib/email.ts's sendAppInviteEmail). No
+ *    Invitation row, nothing to accept, and the recipient never sees this
+ *    household — they set up their own via /onboarding. */
 export async function createInvitation(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const { householdId } = await requireMember();
+  const { userId, householdId } = await requireMember();
 
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { error: "Enter an email address." };
   if (isTooLong(email)) return { error: "That email address is too long." };
+
+  if (formData.get("appOnly")) {
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    try {
+      await sendAppInviteEmail({
+        to: email,
+        inviterName: user.name ?? user.email ?? "Someone",
+      });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Couldn't send that invite." };
+    }
+    return { sent: email };
+  }
 
   try {
     await auth.api.createInvitation({
