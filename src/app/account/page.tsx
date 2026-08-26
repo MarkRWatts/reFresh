@@ -46,9 +46,12 @@ export default async function AccountPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-8 px-4 py-8 sm:px-6">
-      <header className="flex items-center gap-2">
-        <CircleUserRound size={22} className="text-emerald-600" />
-        <h1 className="text-2xl font-semibold text-zinc-900">Account</h1>
+      <header className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CircleUserRound size={22} className="text-emerald-600" />
+          <h1 className="text-2xl font-semibold text-zinc-900">Account</h1>
+        </div>
+        <SignOutButton compact />
       </header>
 
       <section className="flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-4">
@@ -165,8 +168,6 @@ export default async function AccountPage() {
           Import a recipe
         </Link>
       </section>
-
-      <SignOutButton />
 
       <div className="flex justify-center border-t border-zinc-200 pt-6">
         <DeleteAccountButton
