@@ -7,7 +7,7 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 | ![Card browser with the filter bar, protein-type colour coding, and favourite/plan toggles](docs/screenshot-browse.png) | ![The "This week" plan drawer, showing shared ingredients across recipes and a shopping list preview](docs/screenshot-plan.png) | ![Full shopping list page, summed across the week's recipes](docs/screenshot-shopping-list.png) |
 |---|---|---|
 
-> **About the data.** This is a personal, non-commercial project for my own household's meal planning. The scraper only fetches pages `hellofresh.co.uk/robots.txt` explicitly permits crawling, reading the same public sitemap and per-page structured data (`schema.org/Recipe` JSON-LD) any search engine would. No scraped content, database dump, or cache is included in this repository — `.cache/` and `db-backups/` are gitignored — and nothing here is redistributed publicly; the deployed instance is LAN-only, behind sign-in, for real households I know. If you're from HelloFresh and have a concern about this, please open an issue.
+> **About the data.** This is a personal, non-commercial project for my own household's meal planning. The scraper only fetches pages `hellofresh.co.uk/robots.txt` explicitly permits crawling, reading the same public sitemap and per-page structured data (`schema.org/Recipe` JSON-LD) any search engine would. No scraped content, database dump, or cache is included in this repository — `.cache/` and `db-backups/` are gitignored — and nothing here is redistributed publicly; the deployed instance is invite-only — an email allowlist plus sign-in — for real households I know. If you're from HelloFresh and have a concern about this, please open an issue.
 
 ## Contents
 
@@ -144,17 +144,17 @@ docker compose --env-file .env.docker exec app npm run detect-variants
 
 Sign in once (Google or magic link) to create your first `User` row, then either use `/onboarding` in the browser to create a household normally, or — if migrating existing favourite/hidden/plan data from a pre-auth deployment into a real multi-person household — run `scripts/backfill-household.ts` instead (see [DEPLOYMENT.md](DEPLOYMENT.md#multi-household-auth-phase-16) for the exact production sequence, since it has to run in a specific window between two schema migrations).
 
-The app listens on port 3000 (`http://<host>:3000`); edit the `ports:` mapping in `docker-compose.yml` for a different host port. Three named volumes persist state across container rebuilds: `pgdata` (the database itself), `scraper-cache` (`.cache/`, so re-scrapes/reprocesses don't redownload pages already fetched), and `db-backups` (`npm run db:snapshot` output). On TrueNAS specifically, it's worth pointing these at a ZFS dataset via bind mounts instead of Docker-managed named volumes, so they pick up TrueNAS's own snapshot/replication — e.g. swap `pgdata:` for `/mnt/<pool>/refresh/pgdata:/var/lib/postgresql/data` under the `db` service.
+The app listens on port 3000 (`http://<host>:3000`); edit the `ports:` mapping in `docker-compose.override.yml` for a different host port. Four named volumes persist state across container rebuilds: `pgdata` (the database itself), `scraper-cache` (`.cache/`, so re-scrapes/reprocesses don't redownload pages already fetched), `db-backups` (`npm run db:snapshot` output), and `recipe-images` (cover/step photos for custom/imported recipes). On TrueNAS specifically, it's worth pointing these at a ZFS dataset via bind mounts instead of Docker-managed named volumes, so they pick up TrueNAS's own snapshot/replication — e.g. swap `pgdata:` for `/mnt/<pool>/refresh/pgdata:/var/lib/postgresql/data` under the `db` service.
 
-To keep the catalog current, schedule `npm run scrape` (checks the sitemap for new/changed recipes) or `npm run reprocess` (zero network, just reapplies current parsing logic) periodically — e.g. a TrueNAS cron job (System Settings → Advanced → Cron Jobs) running:
+To keep the catalog current, schedule `npm run scrape` (checks the sitemap for new/changed recipes) or `npm run reprocess` (zero network, just reapplies current parsing logic) periodically — e.g. a cron job on the Docker host running:
 
 ```bash
 docker compose -f /path/to/refresh/docker-compose.yml --env-file /path/to/refresh/.env.docker exec -T app npm run scrape
 ```
 
-### Production (TrueNAS VM)
+### Production (Proxmox VM, via Ansible)
 
-The app runs on a TrueNAS-hosted Ubuntu VM, behind a Caddy reverse proxy shared with other apps on the same box, with a real Let's Encrypt certificate (DNS-01 via acme-dns) — see [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup.
+The live instance runs on its own Proxmox VM (`docker-compose.yml` + `docker-compose.prod.yml`), deployed entirely by an Ansible project kept outside this repo: push to `main`, then one `ansible-playbook` run pulls it, rebuilds only if the commit changed, and checks the site over HTTPS. The VM's own Caddy serves it on the LAN with a real Let's Encrypt certificate (DNS-01 via acme-dns); the public path comes in through a Cloudflare Tunnel with Cloudflare Access in front. `.env.docker` lives in the Ansible vault rather than on the server, and the database + recipe images are covered by Proxmox's twice-daily backups of the whole VM (there's no separate backup job on the VM). See [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup, the update/secrets/backup procedures, and how it got there.
 
 ## npm scripts
 
