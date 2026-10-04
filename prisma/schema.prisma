@@ -26,6 +26,7 @@ model User {
 
   accounts Account[]
   sessions Session[]
+  passkeys Passkey[]
 
   // Multi-tenancy (organization plugin, renamed — see auth.ts). A user
   // belongs to at most one household in practice (enforced in auth.ts's
@@ -40,14 +41,16 @@ model Account {
   userId                String
   accountId             String
   providerId            String
-  // The account's issuing authority (e.g. "https://accounts.google.com") —
-  // Better Auth's own core Account schema requires this on every lookup,
-  // separate from providerId. Missed on the first pass through this
-  // schema; the real Google OAuth callback errors without it
-  // ("Unknown argument `issuer`").
-  issuer                String
+  // No `issuer`: Better Auth 1.7.0-1.7.2 required one, 1.7.3+ identifies
+  // an account by providerId + accountId again (see its 1.7 upgrade guide)
+  // and never writes it, so the column was dropped rather than left to
+  // fail every new Account insert.
   accessToken           String?
   refreshToken          String?
+  // Only for email/password sign-in, which this app doesn't enable; Better
+  // Auth 1.7.3+ checks its core schema at startup and refuses auth without
+  // the column.
+  password              String?
   idToken               String?
   scope                 String?
   accessTokenExpiresAt  DateTime?
@@ -58,6 +61,27 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
+}
+
+// Passkeys (@better-auth/passkey, see src/auth.ts) — the plugin's own
+// shape; nothing app-specific added. Cascades with its User, so deleting an
+// account (app/actions/account.ts) can't leave an orphan credential.
+model Passkey {
+  id           String   @id
+  name         String?
+  publicKey    String
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime @default(now())
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
 }
 
 model Session {

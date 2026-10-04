@@ -21,7 +21,7 @@
 //
 // Usage: npx tsx scripts/backfill-household.ts <householdName> <ownerEmail> [memberEmail...]
 // Every listed email must already have a User row — i.e. everyone must
-// have signed in at least once (Google or magic link) before this runs.
+// have signed in at least once (by any sign-in method) before this runs.
 import "dotenv/config";
 import { prisma } from "@/lib/db";
 import { slugify } from "@/lib/recipes/slug";
