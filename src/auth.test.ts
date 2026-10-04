@@ -24,15 +24,18 @@ vi.stubEnv("ALLOWED_EMAILS", "");
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 // The sign-in code email: capture it rather than call Resend.
-const sentEmails: { to: string; subject: string }[] = [];
+type SentEmail = { to: string; subject: string; html: string; text: string };
+const sentEmails: SentEmail[] = [];
 vi.mock("@/lib/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/email")>()),
-  sendEmail: async (message: { to: string; subject: string }) => {
+  sendEmail: async (message: SentEmail) => {
     sentEmails.push(message);
   },
 }));
 
-const { auth: prodAuth, createAuth, passkeyRelyingParty, validateUserInfo } = await import("./auth");
+const { auth: prodAuth, createAuth, passkeyRelyingParty, sendInvitationEmail, validateUserInfo } = await import(
+  "./auth"
+);
 
 // --- A fake Pocket ID ---------------------------------------------------------
 
@@ -370,5 +373,23 @@ describe("the app's auth config", () => {
       rpID: "localhost",
       origin: "http://localhost:3000",
     });
+  });
+});
+
+describe("the household invitation email", () => {
+  it("escapes the inviter's and household's names in the HTML", async () => {
+    const hostile = "<a href=x>Hi</a>";
+    const escaped = "&lt;a href=x&gt;Hi&lt;/a&gt;";
+    const before = sentEmails.length;
+    await sendInvitationEmail({
+      id: "inv_1",
+      email: "friend@example.com",
+      organization: { name: hostile },
+      inviter: { user: { name: hostile, email: "owner@example.com" } },
+    });
+    const message = sentEmails.slice(before).find((m) => m.to === "friend@example.com")!;
+    expect(message.html).not.toContain(hostile);
+    expect(message.html).toContain(`${escaped} invited you to the ${escaped} household`);
+    expect(message.text).toContain(`${hostile} invited you to the ${hostile} household`);
   });
 });
