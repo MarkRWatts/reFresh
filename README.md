@@ -1,6 +1,6 @@
 # re:Fresh
 
-A web app for browsing HelloFresh (UK) recipes as cards and planning a week's meals around **shared ingredients**, to cut food waste and duplicate shopping. Multi-household: sign in with Google or a magic link, and each household keeps its own favourites, hidden recipes, and weekly plan against one shared recipe catalog.
+A web app for browsing HelloFresh (UK) recipes as cards and planning a week's meals around **shared ingredients**, to cut food waste and duplicate shopping. Multi-household: sign in with an emailed code, a passkey, or (at home) Pocket ID, and each household keeps its own favourites, hidden recipes, and weekly plan against one shared recipe catalog.
 
 Full phase-by-phase history, design rationale, and bugs found along the way: [`../reFresh-docs/project-plan.md`](../reFresh-docs/project-plan.md). This README is the practical "how to run and work on this project" reference.
 
@@ -36,13 +36,13 @@ Full phase-by-phase history, design rationale, and bugs found along the way: [`.
 - **Custom & imported recipes**: clone any recipe to edit, or import one from a scanned/photographed card — a "My recipe" / "From a card scan" badge distinguishes these from the scraped catalog. The full editor (name, subtitle, cook time, ingredients, nutrition, steps, cover photo) is available for any of these, with protein-type classification re-derived automatically as you edit, plus a confirm-guarded delete. See [Importing recipes from a scan](#importing-recipes-from-a-scan) for the two ways to do the import itself. Shared across every household, same as the rest of the catalog.
 - **Hide auto-imported recipes**: reversible per-recipe hide (distinct from deleting, which is only for custom/imported recipes) with a "Hidden" filter to find and unhide them — per household, same as favourites.
 - **Ingredient review** (`/ingredients/review`): admin tool for HelloFresh's inevitable naming/unit inconsistencies — rename/merge duplicate ingredients, tag categories, research real pack sizes so the shopping list can convert "1 pot" into a summable amount, and bulk-apply the resulting conversions across every affected recipe. Global (any signed-in user), not household-scoped — it's curating the shared catalog, not personal state. Not linked from the main nav; reach it directly at `/ingredients/review`.
-- **Multi-household accounts**: Google or magic-link sign-in (Better Auth). Every household browses, plans, and clones from the exact same recipe catalog, but keeps its own favourites, hidden list, and this week's plan completely separate from every other household. From `/account`: rename the household, invite others by email or link (to your household, or — via a tickbox — an app-only invite so they start their own), promote/demote/remove members, and delete your own account (deleting a household's sole owner's account takes the whole household with it — confirmed by typing its name). See [Authentication & households](#authentication--households).
+- **Multi-household accounts**: sign in with an emailed six-digit code, a passkey, or (on the home network) Pocket ID — all three reach the same account (Better Auth). Every household browses, plans, and clones from the exact same recipe catalog, but keeps its own favourites, hidden list, and this week's plan completely separate from every other household. From `/account`: rename the household, invite others by email or link (to your household, or — via a tickbox — an app-only invite so they start their own), promote/demote/remove members, and delete your own account (deleting a household's sole owner's account takes the whole household with it — confirmed by typing its name). See [Authentication & households](#authentication--households).
 
 ## Stack
 
 - **Next.js 16** (App Router, TypeScript) + **Tailwind v4** — almost entirely Server Components and Server Actions; the few client islands (toggle buttons, the plan drawer, filter bar, print button, servings pickers) are called out explicitly in the code. Note: Next 16 renamed Middleware to **Proxy** (`src/proxy.ts`, not `middleware.ts`) — the naming throughout this codebase and README follows that.
 - **Prisma 7** + **PostgreSQL**, via `@prisma/adapter-pg` (Prisma 7 requires an explicit driver adapter).
-- **Better Auth** (`src/auth.ts`) — Google OAuth + magic link (via Resend), plus its `organization` plugin renamed to Household/Member/Invitation for multi-household support. See [Authentication & households](#authentication--households).
+- **Better Auth** (`src/auth.ts`) — email code (via Resend), passkeys, and Pocket ID (OIDC), plus its `organization` plugin renamed to Household/Member/Invitation for multi-household support. See [Authentication & households](#authentication--households).
 - **A standalone scraper** (`scripts/scrape.ts`), decoupled from the request path: it populates Postgres from HelloFresh's public sitemap + per-page `schema.org/Recipe` JSON-LD (plus an internal app-data blob for richer per-step photos). The app itself never talks to HelloFresh live.
 - Runs locally via `npm run dev`, or containerized via the included `Dockerfile` + `docker-compose.yml` — see [Deploying with Docker](#deploying-with-docker).
 
@@ -73,11 +73,17 @@ Every route requires a signed-in session with household membership — [`src/pro
 |---|---|
 | `AUTH_SECRET` | Better Auth's session/cookie signing secret — `openssl rand -base64 32` |
 | `AUTH_URL` / `AUTH_TRUSTED_ORIGINS` | Better Auth's own base URL (it doesn't infer this from the request) and CSRF origin allowlist — `http://localhost:3000` for local dev |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth client (Google Cloud Console → APIs & Services → Credentials → Web application), redirect URI `<AUTH_URL>/api/auth/callback/google` |
-| `RESEND_API_KEY` | Sends the transactional emails — magic-link sign-in, household invites, and app-only invites — via Resend's HTTP API (`src/lib/email.ts`); the sending domain needs SPF/DKIM/DMARC verified in Resend |
+| `RESEND_API_KEY` | Sends the transactional emails — sign-in codes, household invites, and app-only invites — via Resend's HTTP API (`src/lib/email.ts`); the sending domain needs SPF/DKIM/DMARC verified in Resend |
+| `POCKET_ID_CLIENT_ID` / `POCKET_ID_CLIENT_SECRET` | Optional. "Sign in with Pocket ID" (the home lab's OIDC provider, LAN/VPN only); registered only when both are set. Redirect URI `<AUTH_URL>/api/auth/callback/pocket-id` |
 | `ALLOWED_EMAILS` | Optional comma-separated sign-in allowlist (case-insensitive). Empty/unset = gate off; when set, any other email is refused a session regardless of sign-in method |
 
-Google sign-in works without `RESEND_API_KEY` set; magic-link sign-in doesn't need real Google credentials. Either alone is enough to develop against locally.
+**Sign-in methods** — all three reach the same `User` row:
+
+- **Email code**: a six-digit code, valid 10 minutes, 3 attempts, matched to the account by email. Codes rather than links so sign-in works inside an installed iOS home-screen app (its own cookie jar: a link tapped in Mail would sign Safari in instead). Never emailed to an address `ALLOWED_EMAILS` would refuse. Requesting and checking codes is throttled in-process per IP and per address+IP / per code request (`src/lib/throttle.ts`, ported from MediaVault), since the sign-in actions call Better Auth directly and skip its own HTTP rate limiter. Locally, without a real `RESEND_API_KEY`, the send fails (logged) and you can't get a code; use a passkey made earlier, or a real key.
+- **Passkey**: added and removed on `/account` (within 24 hours of signing in), used from `/signin` or the email field's autofill. Tied to `AUTH_URL`'s hostname, so `localhost` passkeys only work locally.
+- **Pocket ID**: shown only on the home network (requests that didn't come through Cloudflare, i.e. no `cf-connecting-ip` header — see `src/lib/auth/home-network.ts`), and only lets in members of the Pocket ID group `refresh`. Its first use links to the existing account with the same email.
+
+Every method then faces the same gates: `ALLOWED_EMAILS` on every session, and household membership on every page. Google sign-in was retired in October 2026; its old `Account` rows are left alone.
 
 **Household model**: `Household`/`Member`/`Invitation` are Better Auth's `organization` plugin, renamed to this app's own domain language (see `src/auth.ts`). One household per user, enforced both at creation (`organizationLimit`) and invite-redemption time. Invites are redeemed by token (the invitation row's own id), not matched against the invitee's email — the invitee is emailed the join link, but the email on an invitation stays a delivery address and UI hint, never an authorization check. The invite form's tickbox switches to an **app-only invite**: no `Invitation` row at all, just a branded come-try-re:Fresh email pointing at `/signin`, for inviting someone to start their own household without ever seeing yours. `src/lib/require-member.ts`'s `requireMember()`/`requireMemberOrRedirect()` is the one place every mutating action and protected page resolves "which household is this for" — see [How it works § household-scoped data](#household-scoped-data) for why that matters more than usual here.
 
@@ -142,7 +148,7 @@ docker compose --env-file .env.docker exec app npm run detect-variants
 
 — or copy a snapshot onto the host into the `db-backups` volume (see below) and run `docker compose --env-file .env.docker exec app npm run db:restore`.
 
-Sign in once (Google or magic link) to create your first `User` row, then either use `/onboarding` in the browser to create a household normally, or — if migrating existing favourite/hidden/plan data from a pre-auth deployment into a real multi-person household — run `scripts/backfill-household.ts` instead (see [DEPLOYMENT.md](DEPLOYMENT.md#multi-household-auth-phase-16) for the exact production sequence, since it has to run in a specific window between two schema migrations).
+Sign in once (an emailed code) to create your first `User` row, then either use `/onboarding` in the browser to create a household normally, or — if migrating existing favourite/hidden/plan data from a pre-auth deployment into a real multi-person household — run `scripts/backfill-household.ts` instead (see [DEPLOYMENT.md](DEPLOYMENT.md#multi-household-auth-phase-16) for the exact production sequence, since it has to run in a specific window between two schema migrations).
 
 The app listens on port 3000 (`http://<host>:3000`); edit the `ports:` mapping in `docker-compose.override.yml` for a different host port. Four named volumes persist state across container rebuilds: `pgdata` (the database itself), `scraper-cache` (`.cache/`, so re-scrapes/reprocesses don't redownload pages already fetched), `db-backups` (`npm run db:snapshot` output), and `recipe-images` (cover/step photos for custom/imported recipes). On TrueNAS specifically, it's worth pointing these at a ZFS dataset via bind mounts instead of Docker-managed named volumes, so they pick up TrueNAS's own snapshot/replication — e.g. swap `pgdata:` for `/mnt/<pool>/refresh/pgdata:/var/lib/postgresql/data` under the `db` service.
 
@@ -163,6 +169,7 @@ The live instance runs on its own Proxmox VM (`docker-compose.yml` + `docker-com
 | `npm run dev` | Start the Next.js dev server |
 | `npm run build` / `npm run start` | Production build / serve |
 | `npm run lint` | ESLint |
+| `npm test` | Vitest — sign-in methods and their gates (`src/auth.test.ts` drives Better Auth's real endpoints on an in-memory database) |
 | `npm run scrape -- [flags]` | Crawl the HelloFresh sitemap into Postgres. Flags: `--sample=N` (stratified sample across the whole sitemap), `--limit=N` (stop after N *new* pages), `--concurrency=N` (default 5), `--delay-ms=N` (default 200, politeness delay between live fetches), `--force` (re-process every sitemap URL even if already up to date) |
 | `npm run reprocess` | `scrape --force`, but every page is already cached — reapplies current parsing/classification logic to the whole catalog with **zero network requests**. This is the standard way to backfill a code change (see [How it works](#how-it-works)) |
 | `npm run detect-variants` | Re-cluster near-duplicate recipes across the whole browsable catalog |
@@ -197,7 +204,7 @@ storage/                    # gitignored — RECIPE_IMAGES_DIR default (Docker v
   recipe-images/             # cover/step photos for custom/imported recipes, keyed by recipe id
   pdf-import/                 # working area for the vision batch-import workflow (inbox/staging/done/failed)
 src/
-  auth.ts                   # Better Auth config — Google, magic link, organization (Household) plugin
+  auth.ts                   # Better Auth config — email code, passkeys, Pocket ID, organization (Household) plugin
   proxy.ts                  # edge-level auth gate (Next 16's renamed Middleware) — optimistic cookie check only
   app/                      # Next.js App Router routes
     page.tsx                 # card browser ("/")
@@ -207,11 +214,13 @@ src/
     api/auth/[...all]/         # mounts Better Auth's own routes (toNextJsHandler)
     suggest/                  # auto-suggest page
     plan/print/                # printable shopping list
-    signin/ onboarding/         # sign-in (Google + magic link), first-run create/join-household
+    signin/ onboarding/         # sign-in (email code, passkey, Pocket ID), first-run create/join-household
     invite/[token]/             # public invite landing page (reachable signed out)
-    account/                    # household name/members/invites, sign out, delete account
+    account/                    # passkeys, household name/members/invites, sign out, delete account
     actions/household.ts        # create/rename household, invite/member management, accept invite
     actions/account.ts          # self-service account deletion
+    actions/auth-flow.ts        # sign-in: request/verify an email code, start Pocket ID
+    actions/passkeys.ts         # rename/remove a passkey (adding one is client-side)
   components/                # mostly small client islands next to Server Component pages
   lib/
     scraper/                 # sitemap fetch, JSON-LD/app-data parsing, ingredient-line parsing,
@@ -223,7 +232,9 @@ src/
     mealplan/                 # the (household-scoped) weekly plan: queries, actions, auto-suggest
     favourites/                # favourite toggle action (household-scoped)
     require-member.ts          # requireMember()/requireMemberOrRedirect() — the household-scoping choke point
-    email.ts                   # branded transactional email (magic link, household + app invites) via Resend's HTTP API
+    email.ts                   # branded transactional email (sign-in codes, household + app invites) via Resend's HTTP API
+    otp-email.ts               # the sign-in code email, gated by allowed-email.ts (ALLOWED_EMAILS)
+    auth/                      # Pocket ID provider + group check, home-network detection
     brand/                     # 16/32/48px icon sources for favicon.ico
   generated/prisma/           # Prisma client output (gitignored, regenerated via `prisma generate`)
 ```
@@ -263,9 +274,10 @@ PdfImportDraft(id, originalFilename, templateId, data (Json), createdAt)  // OCR
 // --- Auth (Better Auth core) ---
 
 User(id, name, email, emailVerified, image, createdAt, updatedAt)
-Account(id, userId -> User, accountId, providerId, issuer, accessToken, refreshToken, ...)  // one per linked sign-in method
+Account(id, userId -> User, accountId, providerId, accessToken, refreshToken, ...)  // one per linked provider (Pocket ID; old Google rows)
 Session(id, userId -> User, token, expiresAt, activeHouseholdId, ...)
-Verification(id, identifier, value, expiresAt, ...)          // magic-link / OAuth PKCE transient state
+Verification(id, identifier, value, expiresAt, ...)          // hashed sign-in codes, passkey challenges, OAuth state
+Passkey(id, userId -> User, name, publicKey, credentialID, counter, backedUp, aaguid, ...)
 
 // --- Households (Better Auth's organization plugin, renamed) ---
 
@@ -326,7 +338,6 @@ npx prisma migrate resolve --applied <timestamp>_<name>
 - Cross-unit shopping-list conversion only works for ingredients that have been through the review page (500+ so far) — an ingredient without a researched `packagedUnit` still shows as separate totals per unit it's recorded in.
 - OCR-based card scanning (the in-app `/recipes/import` flow) is imperfect by design — always check the review screen before saving. The vision-based batch alternative is far more accurate but isn't wired into the web UI at all; it's a separate Claude Code workflow (see [Importing recipes from a scan](#importing-recipes-from-a-scan)) with no review step of its own, so a bad transcription there goes straight into the database.
 - Only a handful of known HelloFresh card print layouts are recognized by the OCR path; an unsupported layout has to be entered manually (or via the vision-based path, which doesn't have this limitation).
-- A new Google OAuth client defaults to "Testing" publishing status, which caps sign-in to an explicit test-user list on the consent screen regardless of this app's own open sign-in — publish the client (or add every real sign-in email as a test user) in Google Cloud Console once more than a handful of households need Google sign-in.
 
 ## License
 

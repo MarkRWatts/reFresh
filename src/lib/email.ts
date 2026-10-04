@@ -1,5 +1,5 @@
 // Shared branded-email chrome + send plumbing for any transactional email
-// the app sends (magic-link sign-in and household invites today). One
+// the app sends (sign-in codes and household invites today). One
 // layout keeps them in the same palette/voice without each call site
 // re-inventing table-based HTML-email markup. Sends via Resend's plain HTTP
 // API (no SDK dependency) against the refresh.markrwatts.com domain — see
@@ -23,6 +23,19 @@ const FONT_STACK =
 // path-scoped Bypass application — see DEPLOYMENT.md's Going public notes.
 // Retina-sized at 2x their displayed 56px/26px.
 const EMAIL_ASSET_BASE = (process.env.AUTH_URL ?? "https://refresh.markrwatts.com").replace(/\/$/, "");
+
+/** The app's public origin, for links in emails. */
+export function appBaseUrl(): string {
+  return (process.env.AUTH_URL ?? "https://refresh.markrwatts.com").replace(/\/$/, "");
+}
+
+/** A sign-in code set large in a white chip, for the body of the sign-in
+ *  code email (src/lib/otp-email.ts). Codes are app-generated digits, but
+ *  anything that isn't one is stripped anyway. */
+export function codeChipHtml(code: string): string {
+  const digits = code.replace(/[^0-9A-Za-z]/g, "");
+  return `<p style="margin:24px 0 0; text-align:center;"><span style="display:inline-block; padding:12px 24px; background:#ffffff; border-radius:12px; font-family:${FONT_STACK}; font-size:28px; font-weight:700; letter-spacing:6px; color:${BRAND.emeraldDeep};">${digits}</span></p>`;
+}
 
 export function renderBrandedEmail({
   heading,
@@ -107,7 +120,7 @@ export function renderBrandedEmail({
  *  own household via /onboarding and never sees the sender's. The household
  *  invite email (auth.ts's sendInvitationEmail) is the other, distinct
  *  action. Reaching sign-in still requires the out-of-app gates (Cloudflare
- *  Access + ALLOWED_EMAILS + Google test users) to already list them. */
+ *  Access + ALLOWED_EMAILS) to already list them. */
 export async function sendAppInviteEmail({
   to,
   inviterName,
@@ -115,13 +128,13 @@ export async function sendAppInviteEmail({
   to: string;
   inviterName: string;
 }) {
-  const baseUrl = (process.env.AUTH_URL ?? "https://refresh.markrwatts.com").replace(/\/$/, "");
+  const baseUrl = appBaseUrl();
   const { html, text } = renderBrandedEmail({
     heading: `${inviterName} invited you to try re:Fresh`,
     bodyHtml:
-      "<p>re:Fresh is a shared recipe catalog and weekly meal planner. Sign in with Google or an emailed link, set up your own household, and start planning your week.</p>",
+      "<p>re:Fresh is a shared recipe catalog and weekly meal planner. Sign in with a code we email you, set up your own household, and start planning your week.</p>",
     bodyText:
-      "re:Fresh is a shared recipe catalog and weekly meal planner. Sign in with Google or an emailed link, set up your own household, and start planning your week.",
+      "re:Fresh is a shared recipe catalog and weekly meal planner. Sign in with a code we email you, set up your own household, and start planning your week.",
     ctaLabel: "Get started",
     ctaUrl: `${baseUrl}/signin`,
     footerText: `This invite was sent from re:Fresh by ${inviterName}. If you weren't expecting it, you can safely ignore this email.`,

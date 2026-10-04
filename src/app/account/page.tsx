@@ -1,11 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CircleUserRound, FileText, Home, Mail, Users } from "lucide-react";
+import { CircleUserRound, FileText, Home, KeyRound, Mail, Users } from "lucide-react";
+import { getAuthenticatorName } from "@better-auth/passkey";
 import { prisma } from "@/lib/db";
 import { requireMemberOrRedirect } from "@/lib/require-member";
 import SignOutButton from "@/components/SignOutButton";
 import DeleteAccountButton from "@/components/DeleteAccountButton";
 import RenameHouseholdForm from "@/components/RenameHouseholdForm";
+import { PasskeyManager } from "@/components/account/PasskeyManager";
 import {
   InviteForm,
   PendingInviteRow,
@@ -22,10 +24,17 @@ export default async function AccountPage() {
   const { userId, householdId, role } = await requireMemberOrRedirect();
   const isOwner = role === "owner";
 
-  const [user, household] = await Promise.all([
+  const [user, passkeys, household] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { name: true, email: true, image: true },
+    }),
+    // Read directly rather than via the plugin's list endpoint, same as
+    // every other read on this page.
+    prisma.passkey.findMany({
+      where: { userId },
+      select: { id: true, name: true, createdAt: true, backedUp: true, aaguid: true },
+      orderBy: { createdAt: "asc" },
     }),
     // The household name and member list are visible to every member, not
     // just owners — only the pending-invitations query (and the invite/
@@ -75,6 +84,31 @@ export default async function AccountPage() {
           <span className="text-base font-semibold text-zinc-900">{user.name ?? "No name set"}</span>
           {user.email && <span className="text-sm text-zinc-500">{user.email}</span>}
         </div>
+      </section>
+
+      {/* Date and authenticator label resolved here so the client
+          component renders nothing locale- or server-only-dependent.
+          en-GB is fixed on purpose: a server/client locale disagreement
+          would be a hydration mismatch. */}
+      <section id="passkeys" className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <KeyRound size={20} className="text-emerald-600" />
+          <h2 className="text-xl font-semibold text-zinc-900">Passkeys</h2>
+        </div>
+        <PasskeyManager
+          passkeys={passkeys.map((p) => ({
+            id: p.id,
+            name: p.name,
+            added: p.createdAt.toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
+            backedUp: p.backedUp,
+            authenticator: getAuthenticatorName(p.aaguid) ?? null,
+          }))}
+          signOut={<SignOutButton />}
+        />
       </section>
 
       <section className="flex flex-col gap-4">

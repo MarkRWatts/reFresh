@@ -34,7 +34,8 @@ export type ActionState = { error?: string } | null;
  *  acceptInvitation bypassing /organization/accept-invitation): that
  *  endpoint assumes a password-based flow (requires either a password or
  *  a "fresh" session before it'll proceed), which doesn't fit an app
- *  that's Google/magic-link only and has no password to check.
+ *  that signs in by email code, passkey or Pocket ID and has no password
+ *  to check.
  */
 export async function deleteAccount(
   _prevState: ActionState,

@@ -7,7 +7,7 @@
 # jobAppTracker's DEPLOYMENT.md for the shared reverse-proxy setup.
 # Deliberately not merged into the base docker-compose.yml, which the Mac's
 # local/dev setup also uses with no proxy at all (see
-# docker-compose.override.yml). Auth env vars (AUTH_*, RESEND_API_KEY) live
+# docker-compose.override.yml). Auth env vars (AUTH_*, RESEND_API_KEY, POCKET_ID_*) live
 # in .env.docker like everything else in the base compose file's `app`
 # service — nothing proxy-specific to add here.
 services:

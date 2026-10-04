@@ -4,7 +4,7 @@
 
 Production runs on its own Ubuntu VM on Proxmox, deployed entirely by the Ansible repo [ansible-proxmox01](https://github.com/MarkRWatts/ansible-proxmox01) (private; checked out in the sibling folder `../ansible-homelab`) — the house guide for this pattern is [`../DOCKER-DEPLOY-PLAYBOOK.md`](../DOCKER-DEPLOY-PLAYBOOK.md). Nothing about the deployment is done by hand on the VM. It moved there on 2026-09-15 from the shared TrueNAS VM it had lived on since leaving the Mac — see [History](#history-the-shared-truenas-vm) for that setup, kept as a record.
 
-**Live at**: `https://refresh.example.com` — open to invited households on the internet through a Cloudflare Tunnel with Cloudflare Access in front (no port-forwarding), and reached directly on the LAN via Pi-hole split DNS, with a real Let's Encrypt certificate. Multi-household auth (Google + magic-link, via Better Auth) as of Phase 16 — see [Multi-household auth](#multi-household-auth-phase-16) for the Google/Resend setup and the one-time schema migration + backfill it needed, and [Going public](#going-public-cloudflare-tunnel--access--pi-hole-split-dns) for how the tunnel, Access, split DNS, and the `ALLOWED_EMAILS` gate were set up.
+**Live at**: `https://refresh.example.com` — open to invited households on the internet through a Cloudflare Tunnel with Cloudflare Access in front (no port-forwarding), and reached directly on the LAN via Pi-hole split DNS, with a real Let's Encrypt certificate. Multi-household auth (Better Auth) as of Phase 16; since October 2026 people sign in with an emailed code, a passkey, or (at home) Pocket ID — see [Sign-in methods](#sign-in-methods-email-code-passkeys-pocket-id) for what each needs in production, [Multi-household auth](#multi-household-auth-phase-16) for the original setup and the one-time schema migration + backfill it needed, and [Going public](#going-public-cloudflare-tunnel--access--pi-hole-split-dns) for how the tunnel, Access, split DNS, and the `ALLOWED_EMAILS` gate were set up.
 
 ## 1. Where it runs
 
@@ -48,7 +48,7 @@ The playbook pulls `main` onto the VM with the VM's read-only GitHub deploy key,
 
 ## Secrets (`.env.docker`)
 
-The VM's `.env.docker` (`POSTGRES_*`, `AUTH_*`, `RESEND_API_KEY`, `ALLOWED_EMAILS` — see `.env.docker.example` for the full set) is never edited on the VM. Its contents live in the Ansible vault, as `vault_app_env_file` in the Ansible project's `host_vars/refresh-vm/vault.yml`, and the playbook writes it out. To change any of it:
+The VM's `.env.docker` (`POSTGRES_*`, `AUTH_*`, `RESEND_API_KEY`, `ALLOWED_EMAILS`, `POCKET_ID_*` — see `.env.docker.example` for the full set) is never edited on the VM. Its contents live in the Ansible vault, as `vault_app_env_file` in the Ansible project's `host_vars/refresh-vm/vault.yml`, and the playbook writes it out. To change any of it:
 
 ```bash
 cd ../ansible-homelab
@@ -77,7 +77,26 @@ cd ~/reFresh && docker compose --env-file .env.docker -f docker-compose.yml -f d
 
 `deploy` is in the `docker` group but has no sudo. Make real changes in the Ansible project and rerun the playbook, so the VM never drifts from it.
 
+## Sign-in methods (email code, passkeys, Pocket ID)
+
+Three ways in, all reaching the same `User` row (the same three as MediaVault and jinglejotter.com — see `src/auth.ts`):
+
+- **Emailed six-digit code** (Better Auth `emailOTP`): valid 10 minutes, 3 attempts, stored hashed. Matched to the `User` by email, so everyone who used to sign in with Google or a magic link just types the same address. Codes rather than links because an installed iOS home-screen app has its own cookie jar: a link tapped in Mail signs Safari in, not the app. Needs only `RESEND_API_KEY` and the Resend domain below. Not sent at all to an address `ALLOWED_EMAILS` would refuse.
+- **Passkeys** (`@better-auth/passkey`): added and removed on `/account` (needs a sign-in within the last 24 hours), used from `/signin` or the email field's autofill. The relying party is `AUTH_URL`'s hostname, so passkeys made on `https://refresh.example.com` only work there (and ones made on `localhost` only work locally). Nothing to configure.
+- **Pocket ID** (the home lab's OIDC provider, LAN/VPN only): optional, on only when `POCKET_ID_CLIENT_ID` and `POCKET_ID_CLIENT_SECRET` are both set.
+  - Pocket ID client: ID `refresh`, PKCE on, callback `https://refresh.example.com/api/auth/callback/pocket-id` (add `http://localhost:3000/api/auth/callback/pocket-id` for local dev), scopes `openid email profile groups`. Registering it, the secret, and the env vars are the Ansible project's job.
+  - Only members of the Pocket ID group **`refresh`** get in this way, checked on every Pocket ID sign-in (leaving the group locks Pocket ID out at the next sign-in; their other methods still work). A refusal lands on `/signin?error=no_access` and writes no `User` row.
+  - First Pocket ID sign-in links to the existing `User` with the same email (`accountLinking.trustedProviders: ["pocket-id"]`; Pocket ID emails are verified and only an admin can change them). So each person's Pocket ID email must match their re:Fresh one.
+  - The button only shows on the home network: a request that came through Cloudflare carries `cf-connecting-ip` (set at the edge, passed through by `cloudflared` and Caddy) and gets no button, since Pocket ID wouldn't load from there. LAN requests reach Caddy directly without it. See `src/lib/auth/home-network.ts`.
+  - The VM must reach Pocket ID on 443 for the token exchange (a UniFi rule allows `<vm-ip>` → Pocket ID since 2026-10-03).
+
+Every method then passes the same gates: `ALLOWED_EMAILS` on every session (see [3b](#3b-app-level-allowlist-allowed_emails)), household membership on every page, and invitations to join a household.
+
+Google sign-in was retired in October 2026. Its `Account` rows are still in the database, unused; drop `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` from the vault and delete the Google Cloud OAuth client once the new methods are confirmed working. The October 2026 migration (`20261004120000_otp_passkeys_pocket_id`) adds the `Passkey` table and `Account.password`, and drops `Account.issuer` (Better Auth 1.7.3+ never writes it and validates its schema at startup); it runs on boot like every other migration.
+
 ## Multi-household auth (Phase 16)
+
+> Historical: Google and magic-link sign-in described here were replaced in October 2026 — see [Sign-in methods](#sign-in-methods-email-code-passkeys-pocket-id).
 
 Adds Google + magic-link sign-in (Better Auth) and per-household favourites/hidden/this-week state, replacing the original single-user/no-auth design — see `prisma/schema.prisma` and `project-plan.md`'s Phase 16 entry for the data model. This section covers what was specific to standing that up in production. It was done in Phase 16 on the old shared TrueNAS VM (see [History](#history-the-shared-truenas-vm)), by hand over SSH, and is kept as a record of what was done: on the current setup, the `ssh` / `git pull` / `docker compose up` steps below are the playbook run in [Updating the deployment](#updating-the-deployment), and env vars go in the vault (see [Secrets](#secrets-envdocker)).
 
@@ -176,19 +195,19 @@ Zero Trust → Access → Applications → Add an application → Self-hosted:
 
 Interplay with app auth (verified shapes, no exceptions needed):
 
-- The Google OAuth callback (`/api/auth/callback/google`) and magic-link verify URLs are only ever opened by a browser that has already passed Access, so nothing needs excluding from the policy.
-- A magic-link user on a fresh device does two email round-trips: Access's OTP, then the app's magic link. Mildly clunky but correct — using the same email for both keeps it painless.
+- The app's own sign-in (email code, passkey) only ever runs in a browser that has already passed Access, so nothing needs excluding from the policy. Pocket ID isn't offered on this path at all (see [Sign-in methods](#sign-in-methods-email-code-passkeys-pocket-id)).
+- A user on a fresh device does two email round-trips: Access's OTP, then the app's sign-in code (or none, with a passkey). Mildly clunky but correct — using the same email for both keeps it painless.
 - The app enforces its own `ALLOWED_EMAILS` allowlist as a second layer — see the next section.
 
 ### 3b. App-level allowlist (`ALLOWED_EMAILS`)
 
-Belt and braces: the same email list is enforced *inside* the app too (ported from jinglejotter.com's `app/auth.ts` — a `databaseHooks.session.create.before` hook in `src/auth.ts` that rejects session creation for any email not on the list, regardless of auth method, plus a silent no-op in `sendMagicLinkEmail` so strangers never receive email or learn the app exists). This covers what Access can't: the LAN path (Wi-Fi guests, split-DNS clients) and any future misconfiguration of the tunnel or Access policy.
+Belt and braces: the same email list is enforced *inside* the app too (ported from jinglejotter.com's `app/auth.ts` — a `databaseHooks.session.create.before` hook in `src/auth.ts` that rejects session creation for any email not on the list, regardless of auth method, plus a silent no-op in `src/lib/otp-email.ts` so strangers are never emailed a sign-in code or learn the app exists). It covers every sign-in method: email code, passkey and Pocket ID all create their session through the same hook. This covers what Access can't: the LAN path (Wi-Fi guests, split-DNS clients) and any future misconfiguration of the tunnel or Access policy.
 
 One deliberate difference from jinglejotter.com's version: **empty/unset = gate OFF** (anyone may sign in), so local dev and the LAN-only deployment work without the var. That makes setting it a required go-public step:
 
 - Set `ALLOWED_EMAILS=<comma-separated list>` in `.env.docker` — i.e. in the vault, then run the playbook (see [Secrets](#secrets-envdocker)); the changed env file recreates the containers. Case-insensitive, whitespace around commas tolerated.
 - Keep it in lockstep with the Access policy — same emails in both places. Access rejects strangers at Cloudflare's edge; `ALLOWED_EMAILS` rejects them at session creation.
-- A rejected sign-in surfaces as `?error=failed_to_create_session` on the sign-in page (Better Auth's generic failure), not a bespoke "not invited" message — acceptable for a vetted-invitees app.
+- A rejected sign-in looks like any other failure, not a bespoke "not invited" message — acceptable for a vetted-invitees app: an email code is never sent (and a typed one "didn't work"), a passkey "couldn't sign you in", and Pocket ID lands on `/signin` with Better Auth's generic error code.
 - Unlike the Access policy, changing this list means a vault edit + playbook run, not a dashboard edit. Access remains the quick lever; this is the backstop.
 
 ### As applied (2026-08-25)
@@ -222,9 +241,10 @@ No ports are forwarded on the router — the tunnel is outbound-only from `cloud
 
 ### 6. Verify
 
-- From mobile data (off Wi-Fi): `https://refresh.example.com` → Access prompt → OTP/Google → app sign-in works end-to-end (Google and magic link both).
+- From mobile data (off Wi-Fi): `https://refresh.example.com` → Access prompt → OTP → app sign-in works end-to-end (email code and passkey), and `/signin` shows no Pocket ID button.
 - An email *not* on the Access policy is refused before reaching the app.
-- From the LAN (which bypasses Access): a sign-in attempt with an email not in `ALLOWED_EMAILS` fails with `?error=failed_to_create_session`, and a magic-link request for it sends no email (check Resend's log shows nothing).
+- From the LAN (which bypasses Access): a sign-in attempt with an email not in `ALLOWED_EMAILS` is refused a session, and a code request for it sends no email (check Resend's log shows nothing).
+- On the LAN: `/signin` shows "Sign in with Pocket ID", and a Pocket ID account outside the `refresh` group is turned back with a clear message.
 - On the LAN: cert is the Let's Encrypt one (not Cloudflare's), no Access prompt, app works as before.
 - The tunnel shows **Healthy** in the dashboard, and the `cloudflared` connector's logs on `tunnel-vm` show established connections, no reconnect loops.
 
