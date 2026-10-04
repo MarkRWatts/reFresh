@@ -41,7 +41,7 @@ type Env = Record<string, string | undefined>;
 // "stranger probing for whether this app exists" concern. (The invitee may
 // still hit the ALLOWED_EMAILS wall at sign-in time — that's a separate,
 // deliberate gate.)
-async function sendInvitationEmail(data: {
+export async function sendInvitationEmail(data: {
   id: string;
   email: string;
   organization: { name: string };

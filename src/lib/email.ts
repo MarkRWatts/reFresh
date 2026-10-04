@@ -37,6 +37,20 @@ export function codeChipHtml(code: string): string {
   return `<p style="margin:24px 0 0; text-align:center;"><span style="display:inline-block; padding:12px 24px; background:#ffffff; border-radius:12px; font-family:${FONT_STACK}; font-size:28px; font-weight:700; letter-spacing:6px; color:${BRAND.emeraldDeep};">${digits}</span></p>`;
 }
 
+/** Escapes text for an HTML text node or a double-quoted attribute value. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** heading, ctaLabel, ctaUrl and footerText are plain text — they can carry
+ *  user-controlled names (an inviter's display name, a household name), so
+ *  they're HTML-escaped here. bodyHtml goes in as-is: callers must build it
+ *  from app-authored markup only, escaping anything user-supplied first. */
 export function renderBrandedEmail({
   heading,
   bodyHtml,
@@ -52,6 +66,12 @@ export function renderBrandedEmail({
   ctaUrl: string;
   footerText?: string;
 }): { html: string; text: string } {
+  const h = {
+    heading: escapeHtml(heading),
+    ctaLabel: escapeHtml(ctaLabel),
+    ctaUrl: escapeHtml(ctaUrl),
+    footerText: escapeHtml(footerText),
+  };
   const html = `<!DOCTYPE html>
 <html>
   <head>
@@ -79,27 +99,27 @@ export function renderBrandedEmail({
             </tr>
             <tr>
               <td style="padding:16px 32px 0;">
-                <h1 style="margin:0 0 16px; font-size:22px; line-height:1.3; color:${BRAND.zinc};">${heading}</h1>
+                <h1 style="margin:0 0 16px; font-size:22px; line-height:1.3; color:${BRAND.zinc};">${h.heading}</h1>
                 <div style="font-size:15px; line-height:1.6; color:${BRAND.zinc};">${bodyHtml}</div>
               </td>
             </tr>
             <tr>
               <td style="padding:24px 32px 8px; text-align:center;">
-                <a href="${ctaUrl}" style="display:inline-block; background:${BRAND.emerald}; color:#ffffff; font-weight:700; font-size:15px; text-decoration:none; padding:14px 32px; border-radius:999px;">${ctaLabel}</a>
+                <a href="${h.ctaUrl}" style="display:inline-block; background:${BRAND.emerald}; color:#ffffff; font-weight:700; font-size:15px; text-decoration:none; padding:14px 32px; border-radius:999px;">${h.ctaLabel}</a>
               </td>
             </tr>
             <tr>
               <td style="padding:8px 32px 0; text-align:center;">
                 <p style="margin:0; font-size:12px; line-height:1.5; color:${BRAND.zincSoft}; word-break:break-all;">
                   Or paste this link into your browser:<br />
-                  <a href="${ctaUrl}" style="color:${BRAND.zincSoft};">${ctaUrl}</a>
+                  <a href="${h.ctaUrl}" style="color:${BRAND.zincSoft};">${h.ctaUrl}</a>
                 </p>
               </td>
             </tr>
             <tr>
               <td style="padding:24px 32px 32px; text-align:center;">
                 <p style="margin:0; font-size:12px; line-height:1.5; color:${BRAND.zincSoft};">
-                  ${footerText}
+                  ${h.footerText}
                 </p>
               </td>
             </tr>
