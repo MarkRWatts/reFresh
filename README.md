@@ -79,7 +79,7 @@ Every route requires a signed-in session with household membership — [`src/pro
 
 **Sign-in methods** — all three reach the same `User` row:
 
-- **Email code**: a six-digit code, valid 10 minutes, 3 attempts, matched to the account by email. Codes rather than links so sign-in works inside an installed iOS home-screen app (its own cookie jar: a link tapped in Mail would sign Safari in instead). Never emailed to an address `ALLOWED_EMAILS` would refuse. Locally, without a real `RESEND_API_KEY`, the send fails (logged) and you can't get a code; use a passkey made earlier, or a real key.
+- **Email code**: a six-digit code, valid 10 minutes, 3 attempts, matched to the account by email. Codes rather than links so sign-in works inside an installed iOS home-screen app (its own cookie jar: a link tapped in Mail would sign Safari in instead). Never emailed to an address `ALLOWED_EMAILS` would refuse. Requesting and checking codes is throttled in-process per IP and per address+IP / per code request (`src/lib/throttle.ts`, ported from MediaVault), since the sign-in actions call Better Auth directly and skip its own HTTP rate limiter. Locally, without a real `RESEND_API_KEY`, the send fails (logged) and you can't get a code; use a passkey made earlier, or a real key.
 - **Passkey**: added and removed on `/account` (within 24 hours of signing in), used from `/signin` or the email field's autofill. Tied to `AUTH_URL`'s hostname, so `localhost` passkeys only work locally.
 - **Pocket ID**: shown only on the home network (requests that didn't come through Cloudflare, i.e. no `cf-connecting-ip` header — see `src/lib/auth/home-network.ts`), and only lets in members of the Pocket ID group `refresh`. Its first use links to the existing account with the same email.
 

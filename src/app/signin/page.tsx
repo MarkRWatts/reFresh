@@ -10,6 +10,7 @@ import { PasskeySignInButton } from "@/components/auth/PasskeySignInButton";
 import { isHomeNetworkRequest } from "@/lib/auth/home-network";
 import { NO_ACCESS_ERROR, REQUIRED_GROUP, pocketIdConfig } from "@/lib/auth/pocket-id";
 import { OTP_EMAIL_COOKIE } from "@/lib/flow-cookies";
+import { verifyOtpFlow } from "@/lib/otp-flow-token";
 import { safeCallbackURL } from "@/lib/safe-callback";
 
 const PRIMARY_BUTTON_CLASSNAME =
@@ -27,6 +28,8 @@ function errorMessage(error: string): string {
       return "Enter an email address first.";
     case "BadEmail":
       return "That email address doesn't look right.";
+    case "TooMany":
+      return "Too many sign-in codes requested — wait a little and try again.";
     case "SendFailed":
       return "Couldn't send your code — try again in a moment.";
     case "PocketIdUnavailable":
@@ -60,7 +63,7 @@ export default async function SignInPage({
 
   // Step 2 needs the flow cookie; without it (expired, cleared) fall back to
   // step 1 regardless of the query param.
-  const otpEmail = otp ? (await cookies()).get(OTP_EMAIL_COOKIE)?.value : undefined;
+  const otpEmail = otp ? verifyOtpFlow((await cookies()).get(OTP_EMAIL_COOKIE)?.value)?.email : undefined;
 
   // Pocket ID only answers on the home network, so the button only shows
   // there — see src/lib/auth/home-network.ts for how that's told apart.
